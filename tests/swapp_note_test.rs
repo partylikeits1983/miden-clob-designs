@@ -1,21 +1,17 @@
-use std::{fs, path::Path};
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
     asset::FungibleAsset,
-    note::{
-        Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
-        NoteRecipient, NoteScript, NoteTag, NoteType,
-    },
-    transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
-    ClientError, Felt, Word,
+    note::NoteType,
+    transaction::{OutputNote, TransactionRequestBuilder},
+    ClientError, Felt,
 };
 
-use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
+use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
     create_basic_account, create_basic_faucet, create_p2id_note, create_partial_swap_note,
-    initialize_client, wait_for_notes,
+    get_swapp_note, initialize_client, wait_for_notes,
 };
 
 #[tokio::test]
@@ -140,6 +136,8 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     )
     .unwrap();
 
+    let swapp_tag = swapp_note.metadata().tag();
+
     /*     let mut secret_vals = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
     secret_vals.splice(0..0, Word::default().iter().cloned());
     let digest = Hasher::hash_elements(&secret_vals);
@@ -178,6 +176,10 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     );
     let _ = client.submit_transaction(tx_result).await;
     client.sync_state().await?;
+
+    let swapp_note_id = swapp_note.id();
+
+    let _ = get_swapp_note(&mut client, swapp_tag, swapp_note_id).await;
 
     // -------------------------------------------------------------------------
     // STEP 4: Partial Consume SWAPP note
@@ -223,6 +225,8 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
         p2id_serial_num_1,
     )
     .unwrap();
+
+    let _ = client.sync_state().await;
 
     // -------------------------------------------------------------------------
     // STEP 4: Partial Consume SWAPP note

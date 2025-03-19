@@ -1,7 +1,7 @@
 use rand::Rng;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use std::{fs, path::Path, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
@@ -9,19 +9,18 @@ use miden_client::{
         component::{BasicFungibleFaucet, BasicWallet, RpoFalcon512},
         AccountBuilder, AccountStorageMode, AccountType,
     },
-    asset::{FungibleAsset, TokenSymbol},
+    asset::TokenSymbol,
     crypto::RpoRandomCoin,
     note::{
-        Note, NoteAssets, NoteError, NoteExecutionHint, NoteExecutionMode, NoteInputs,
+        Note, NoteAssets, NoteError, NoteExecutionHint, NoteExecutionMode, NoteId, NoteInputs,
         NoteMetadata, NoteRecipient, NoteScript, NoteTag, NoteType,
     },
     rpc::{Endpoint, TonicRpcClient},
     store::{sqlite_store::SqliteStore, StoreAuthenticator},
-    transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
+    transaction::TransactionKernel,
     Client, ClientError, Felt,
 };
 
-use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 use miden_objects::{
     account::{AccountId, AuthSecretKey},
     assembly::{Assembler, DefaultSourceManager},
@@ -191,6 +190,38 @@ pub async fn wait_for_notes(
     Ok(())
 }
 
+pub async fn get_swapp_note(
+    client: &mut Client<RpoRandomCoin>,
+    tag: NoteTag,
+    swapp_note_id: NoteId,
+) -> Result<(), ClientError> {
+    loop {
+        // Sync the state and add the tag
+        client.sync_state().await?;
+        client.add_note_tag(tag).await?;
+
+        // Fetch notes
+        let notes = client.get_consumable_notes(None).await?;
+
+        // Check if any note matches the swapp_note_id
+        let found = notes.iter().any(|(note, _)| note.id() == swapp_note_id);
+
+        if found {
+            println!("Found the note with ID: {:?}", swapp_note_id);
+            break;
+        }
+
+        // Otherwise, keep waiting
+        println!(
+            "No matching SWAPP note found yet. Currently have {} consumable notes. Waiting...",
+            notes.len()
+        );
+        sleep(Duration::from_secs(3)).await;
+    }
+
+    Ok(())
+}
+
 /// @DEV MUST CHANGE LOGIC HERE
 ///
 ///
@@ -227,14 +258,14 @@ pub fn create_partial_swap_note(
     let note_type = NoteType::Public;
 
     let requested_asset_word: Word = requested_asset.into();
-    let tag = build_swap_tag(note_type, &offered_asset, &requested_asset)?;
+    let swapp_tag = build_swap_tag(note_type, &offered_asset, &requested_asset)?;
 
     let inputs = NoteInputs::new(vec![
         requested_asset_word[0],
         requested_asset_word[1],
         requested_asset_word[2],
         requested_asset_word[3],
-        tag.inner().into(),
+        swapp_tag.inner().into(),
         Felt::new(0),
         Felt::new(0),
         Felt::new(0),
@@ -252,7 +283,7 @@ pub fn create_partial_swap_note(
     let metadata = NoteMetadata::new(
         last_consumer,
         note_type,
-        tag,
+        swapp_tag,
         NoteExecutionHint::always(),
         aux,
     )?;
@@ -273,7 +304,7 @@ pub fn create_p2id_note(
     serial_num: [Felt; 4],
 ) -> Result<Note, NoteError> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let path: PathBuf = [manifest_dir, "masm", "notes", "SWAPP.masm"]
+    let path: PathBuf = [manifest_dir, "masm", "notes", "P2ID.masm"]
         .iter()
         .collect();
 
