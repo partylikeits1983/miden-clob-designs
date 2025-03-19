@@ -323,3 +323,16 @@ pub fn create_p2id_note(
     let recipient = NoteRecipient::new(serial_num, note_script, inputs);
     Ok(Note::new(vault, metadata, recipient))
 }
+
+pub async fn reset_store_sqlite() {
+    let path = "./store.sqlite3";
+    if tokio::fs::metadata(path).await.is_ok() {
+        if let Err(e) = tokio::fs::remove_file(path).await {
+            eprintln!("failed to remove {}: {}", path, e);
+        } else {
+            println!("deleted store: {}", path);
+        }
+    } else {
+        println!("store not found: {}", path);
+    }
+}

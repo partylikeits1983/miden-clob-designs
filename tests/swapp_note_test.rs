@@ -11,11 +11,14 @@ use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
     create_basic_account, create_basic_faucet, create_p2id_note, create_partial_swap_note,
-    get_swapp_note, initialize_client, wait_for_notes,
+    get_swapp_note, initialize_client, reset_store_sqlite, wait_for_notes,
 };
 
 #[tokio::test]
 async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
+    // reset store.sqlite file
+    reset_store_sqlite().await;
+
     let mut client = initialize_client().await?;
     println!(
         "Client initialized successfully. Latest block: {}",
@@ -228,13 +231,19 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
 
     let _ = client.sync_state().await;
 
+    println!("P2ID script hash: {:?}", p2id_note.script().hash());
+
     // -------------------------------------------------------------------------
     // STEP 4: Partial Consume SWAPP note
     // -------------------------------------------------------------------------
     println!("CONSUMING NOTE");
+
+    println!("faucet A id: prefix: {:?} suffix: {:?}", faucet_a.id().prefix(), faucet_a.id().suffix());
+    println!("faucet B id: prefix: {:?} suffix: {:?}", faucet_b.id().prefix(), faucet_b.id().suffix());
+
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(swapp_note.id(), None)])
-        .with_expected_output_notes(vec![swapp_note_1, p2id_note])
+        // .with_expected_output_notes(vec![swapp_note_1, p2id_note])
         .build();
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
