@@ -197,8 +197,10 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), asset_amount_b_out).unwrap();
     let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count_1);
 
-    println!("swapp serial num: {:?}", swap_serial_num);
-    println!("p2id serial num: {:?}", p2id_serial_num_1);
+    println!("swapp serial num 1: {:?}", swap_serial_num_1);
+    println!("swapp recipient: {:?}", swapp_note_1.recipient().digest());
+    println!("swapp' tag: {:?}", swapp_note.metadata().tag());
+    // println!("p2id serial num: {:?}", p2id_serial_num_1);
 
     let p2id_note = create_p2id_note(
         bob_account.id(),
@@ -213,9 +215,12 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     println!("p2id recipient: {:?}", p2id_note.recipient().digest());
     println!("p2id script hash: {:?}", p2id_note.script().hash());
 
-    let _ = client.sync_state().await;
+    println!("P2id num: {:?}", p2id_note.id());
+    println!("p2id tag: {:?}", p2id_note.metadata().tag());
 
-    println!("P2ID script hash: {:?}", p2id_note.script().hash());
+    println!("swapp num: {:?}", swapp_note_1.id());
+
+    let _ = client.sync_state().await;
 
     // -------------------------------------------------------------------------
     // STEP 4: Partial Consume SWAPP note
@@ -239,6 +244,7 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
         .with_authenticated_input_notes([(swapp_note.id(), None)])
         .with_expected_output_notes(vec![p2id_note, swapp_note_1])
         .build();
+
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
         .await

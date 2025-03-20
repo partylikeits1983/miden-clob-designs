@@ -7,3 +7,9 @@ running tests:
 ```bash
 cargo test --release  swap_note_partial_consume_test -- --nocapture
 ```
+
+
+Formatting masm:
+```
+cargo masm-fmt masm
+```

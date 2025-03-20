@@ -277,6 +277,8 @@ pub fn create_partial_swap_note(
         creator.suffix().into(),
     ])?;
 
+    println!("SWAPP inputs: {:?}", inputs);
+
     let aux = Felt::new(0);
 
     // build the outgoing note
@@ -323,6 +325,8 @@ pub fn create_p2id_note(
 
     println!("p2id input commitment: {:?}", inputs.commitment());
     let recipient = NoteRecipient::new(serial_num, note_script, inputs);
+
+    println!("p2id recipient: {:?}", recipient.digest());
     Ok(Note::new(vault, metadata, recipient))
 }
 

@@ -85,9 +85,35 @@ async fn note_input_commitment_test() -> Result<(), ClientError> {
     println!("\n[STEP 4] Bob consumes the Note");
     // let secret = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
 
-    let inputs: NoteInputs = NoteInputs::new(vec![Felt::new(2), Felt::new(1)]).unwrap();
+    let hashed_vec: Vec<Felt> = Hasher::hash_elements(&[
+        Felt::new(1),
+        Felt::new(2),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+    ])
+    .to_vec();
 
-    println!("input commitment: {:?}", inputs.commitment());
+    let inputs: NoteInputs = NoteInputs::new(vec![
+        Felt::new(1),
+        Felt::new(2),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+    ])
+    .unwrap();
+
+    let inputs_1: NoteInputs = NoteInputs::new(vec![Felt::new(1), Felt::new(2)]).unwrap();
+
+    println!("hashed vec: {:?}", hashed_vec);
+    println!("inputs commitment: {:?}", inputs.commitment());
+    println!("inputs_1 commitment: {:?}", inputs_1.commitment());
 
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), None)])
