@@ -315,11 +315,13 @@ pub fn create_p2id_note(
 
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
 
-    let inputs = NoteInputs::new(vec![target.prefix().into(), target.prefix().into()])?;
+    let inputs = NoteInputs::new(vec![target.prefix().into(), target.suffix().into()])?;
     let tag = NoteTag::from_account_id(target, NoteExecutionMode::Local)?;
 
     let metadata = NoteMetadata::new(sender, note_type, tag, NoteExecutionHint::always(), aux)?;
     let vault = NoteAssets::new(assets)?;
+
+    println!("p2id input commitment: {:?}", inputs.commitment());
     let recipient = NoteRecipient::new(serial_num, note_script, inputs);
     Ok(Note::new(vault, metadata, recipient))
 }

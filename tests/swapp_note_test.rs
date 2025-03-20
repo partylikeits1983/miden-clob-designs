@@ -30,16 +30,16 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
     let alice_account = create_basic_account(&mut client).await?;
-    println!("Alice's account ID: {:?}", alice_account.id().to_hex());
+    println!("Alice's account ID: {:?}", alice_account.id());
     let bob_account = create_basic_account(&mut client).await?;
-    println!("Bob's account ID: {:?}", bob_account.id().to_hex());
+    println!("Bob's account ID: {:?}", bob_account.id());
 
     println!("\nDeploying two new fungible faucets.");
     let faucet_a = create_basic_faucet(&mut client).await?;
-    println!("Faucet A account ID: {:?}", faucet_a.id().to_hex());
+    println!("Faucet A account ID: {:?}", faucet_a.id());
 
     let faucet_b = create_basic_faucet(&mut client).await?;
-    println!("Faucet B account ID: {:?}", faucet_b.id().to_hex());
+    println!("Faucet B account ID: {:?}", faucet_b.id());
     client.sync_state().await?;
 
     // -------------------------------------------------------------------------
@@ -195,8 +195,9 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     // Build P2ID note
     let asset_amount_b_out = 25;
     let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), asset_amount_b_out).unwrap();
-    let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count);
+    let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count_1);
 
+    println!("swapp serial num: {:?}", swap_serial_num);
     println!("p2id serial num: {:?}", p2id_serial_num_1);
 
     let p2id_note = create_p2id_note(
@@ -208,6 +209,9 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
         p2id_serial_num_1,
     )
     .unwrap();
+
+    println!("p2id recipient: {:?}", p2id_note.recipient().digest());
+    println!("p2id script hash: {:?}", p2id_note.script().hash());
 
     let _ = client.sync_state().await;
 

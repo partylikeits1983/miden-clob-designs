@@ -161,18 +161,28 @@ end
 
 #! Returns the P2ID RECIPIENT for a specified SERIAL_NUM, SCRIPT_HASH, and account_id
 #!
-#! Inputs: [SERIAL_NUM, SCRIPT_HASH, account_id]
+#! Inputs: [SERIAL_NUM, SCRIPT_HASH]
 #! Outputs: [P2ID_RECIPIENT]
 #!
 proc.build_p2id_recipient_hash
     padw hmerge
-    # => [SERIAL_NUM_HASH, SCRIPT_HASH, account_id]
+    # => [SERIAL_NUM_HASH, SCRIPT_HASH]
 
     swapw hmerge
-    # => [SERIAL_SCRIPT_HASH, account_id]
+    # => [SERIAL_SCRIPT_HASH]
 
-    swapw swap.3 padw hmerge
-    # => [INPUT_HASH, SERIAL_SCRIPT_HASH]
+    push.2 push.SWAPP_CREATOR_PREFIX_INPUT
+    # => [inputs_ptr, num_inputs, SERIAL_SCRIPT_HASH]
+
+    push.3030 debug.stack debug.mem.12.13 drop
+
+    exec.note::compute_inputs_hash
+    # => [INPUTS_HASH, SERIAL_SCRIPT_HASH]
+
+    push.4040 debug.stack drop
+
+
+    swapw
 
     hmerge
     # => [P2ID_RECIPIENT]
@@ -228,8 +238,6 @@ proc.is_consumer_is_creator
 
     exec.account::get_id
     # => [acct_id_prefix, acct_id_suffix]
-
-    push.111 debug.stack debug.mem drop
 
     mem_load.0x0000000d mem_load.0x0000000c
     # => [acct_id_prefix_input, acct_id_suffix_input, acct_id_prefix, acct_id_suffix]
@@ -417,26 +425,26 @@ proc.execute_SWAPp
     # 3) create SWAPp' and calculate token_a' & token_b'
     # 4) add token_a' and token_b' to SWAPp'
 
-    mem_load.SWAPP_CREATOR_SUFFIX_INPUT
-    mem_load.SWAPP_CREATOR_PREFIX_INPUT
+    # mem_load.SWAPP_CREATOR_SUFFIX_INPUT
+    # mem_load.SWAPP_CREATOR_PREFIX_INPUT
     # => [creator_id_prefix, creator_id_suffix]
 
     padw mem_loadw.P2ID_SCRIPT_HASH_WORD
-    # => [P2ID_SCRIPT_HASH, creator_id_prefix, creator_id_suffix]
+    # => [P2ID_SCRIPT_HASH]
 
     exec.increment_swap_count
-    # => [P2ID_SCRIPT_HASH, creator_id_prefix, creator_id_suffix]
+    # => [P2ID_SCRIPT_HASH]
 
     padw mem_loadw.SWAPP_COUNT_INPUT
-    # => [SWAP_COUNT, P2ID_SCRIPT_HASH, creator_id_prefix, creator_id_suffix]
+    # => [SWAP_COUNT, P2ID_SCRIPT_HASH]
 
     exec.note::get_serial_number
-    # => [SWAP_SERIAL_NUM, SWAP_COUNT, P2ID_SCRIPT_HASH, creator_id_prefix, creator_id_suffix]
+    # => [SWAP_SERIAL_NUM, SWAP_COUNT, P2ID_SCRIPT_HASH]
 
     push.666 debug.stack drop
 
     exec.get_p2id_serial_num
-    # => [P2ID_SERIAL_NUM, P2ID_SCRIPT_HASH, creator_id_prefix, creator_id_suffix]
+    # => [P2ID_SERIAL_NUM, P2ID_SCRIPT_HASH]
 
     push.777 debug.stack drop
 
@@ -576,7 +584,7 @@ begin
     drop drop drop mem_store.AMT_TOKENS_B_IN
     # => []
 
-    push.1928473465238172547.11900545512113364072.1324187411136457873.5114721150025532103
+    push.5114721150025532103.1324187411136457873.11900545512113364072.1928473465238172547
     mem_storew.P2ID_SCRIPT_HASH_WORD dropw
     # => []
 
