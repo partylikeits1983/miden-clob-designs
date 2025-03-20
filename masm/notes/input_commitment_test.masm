@@ -1,0 +1,35 @@
+use.miden::note
+begin
+
+    push.111 debug.stack drop
+
+    push.1.2
+    # => [2,1]
+
+    mem_store.0 
+    mem_store.1 
+
+    push.2.0
+
+    push.222 debug.stack debug.mem drop
+
+    # => [0, 2]
+    # => [inputs_ptr, num_inputs]
+
+    # memory:
+    # Memory state before step 3138 for the context 3120:
+    # ├── 0x00000000:  2
+    # ├── 0x00000001:  1
+    # ├── 0x00000002:  0
+    # └── 0x00000003:  0
+
+    # @dev Rust equivalent?
+    # let inputs: NoteInputs = NoteInputs::new(vec![Felt::new(2), Felt::new(1)]).unwrap();
+
+    exec.note::compute_inputs_hash
+
+    push.333 debug.stack drop
+
+    dropw dropw dropw dropw
+
+end
