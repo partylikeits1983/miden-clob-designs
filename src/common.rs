@@ -323,10 +323,8 @@ pub fn create_p2id_note(
     let metadata = NoteMetadata::new(sender, note_type, tag, NoteExecutionHint::always(), aux)?;
     let vault = NoteAssets::new(assets)?;
 
-    println!("p2id input commitment: {:?}", inputs.commitment());
     let recipient = NoteRecipient::new(serial_num, note_script, inputs);
 
-    println!("p2id recipient: {:?}", recipient.digest());
     Ok(Note::new(vault, metadata, recipient))
 }
 
