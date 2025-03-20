@@ -215,8 +215,6 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     println!("p2id recipient: {:?}", p2id_note.recipient().digest());
     println!("p2id script hash: {:?}", p2id_note.script().hash());
 
-    // println!("p2id: {:?}", p2id_note.);
-
     println!("P2id num: {:?}", p2id_note.id());
     println!("p2id tag: {:?}", p2id_note.metadata().tag());
 

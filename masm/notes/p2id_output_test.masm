@@ -1,0 +1,73 @@
+use.miden::note
+use.miden::contracts::wallets::basic->wallet
+
+#! Inputs: [SERIAL_NUM, SCRIPT_HASH]
+proc.build_p2id_recipient_hash
+    padw hmerge
+    # => [SERIAL_NUM_HASH, SCRIPT_HASH]
+
+    swapw hmerge
+    # => [SERIAL_SCRIPT_HASH]
+
+    # push.2 push.SWAPP_CREATOR_PREFIX_INPUT
+    # => [inputs_ptr, num_inputs, SERIAL_SCRIPT_HASH]
+
+    padw
+    # mem_load.SWAPP_CREATOR_PREFIX_INPUT mem_load.SWAPP_CREATOR_SUFFIX_INPUT
+    mem_load.16 mem_load.17
+    push.0.0
+
+    push.16 mem_storew dropw
+    push.20 mem_storew dropw
+
+    push.8.16
+
+    debug.mem.16.20
+
+    exec.note::compute_inputs_hash
+    # => [INPUTS_HASH, SERIAL_SCRIPT_HASH]
+
+    hmerge
+    # => [P2ID_RECIPIENT]
+end
+
+begin
+    mem_storew.16 dropw
+
+    # get asset
+    push.0 exec.note::get_assets drop drop
+
+    # consume half
+    mem_loadw.0
+
+    push.111 debug.stack drop
+
+    swap.3 push.2 div swap.3
+
+    mem_storew.0
+
+    push.222 debug.stack drop
+
+    call.wallet::receive_asset
+
+    debug.stack
+
+    # push script hash
+    push.5114721150025532103.1324187411136457873.11900545512113364072.1928473465238172547
+
+    # serial num
+    push.1.1.1.1
+    # => [P2ID_SERIAL_NUM, P2ID_SCRIPT_HASH]
+
+    push.333 debug.stack drop
+
+    exec.build_p2id_recipient_hash
+    # => [P2ID_RECIPIENT]
+
+    push.444 debug.stack drop
+
+    # create p2id with other half
+
+    # Call receive asset in wallet
+    # => []
+end
