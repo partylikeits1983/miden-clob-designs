@@ -26,7 +26,7 @@ use miden_objects::{
     assembly::{Assembler, DefaultSourceManager},
     asset::Asset,
     crypto::dsa::rpo_falcon512::SecretKey,
-    Word,
+    Hasher, Word,
 };
 
 use miden_lib::note::utils::build_swap_tag;
@@ -243,7 +243,7 @@ pub fn create_partial_swap_note(
     offered_asset: Asset,
     requested_asset: Asset,
     swap_serial_num: [Felt; 4],
-    fill_number: u64,
+    swap_count: u64,
 ) -> Result<Note, NoteError> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let path: PathBuf = [manifest_dir, "masm", "notes", "SWAPP.masm"]
@@ -269,7 +269,7 @@ pub fn create_partial_swap_note(
         Felt::new(0),
         Felt::new(0),
         Felt::new(0),
-        Felt::new(fill_number),
+        Felt::new(swap_count),
         Felt::new(0),
         Felt::new(0),
         Felt::new(0),
@@ -335,4 +335,16 @@ pub async fn reset_store_sqlite() {
     } else {
         println!("store not found: {}", path);
     }
+}
+
+pub fn get_p2id_serial_num(swap_serial_num: [Felt; 4], swap_count: u64) -> [Felt; 4] {
+    let swap_count_word = [
+        Felt::new(swap_count),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+    ];
+    let p2id_serial_num = Hasher::merge(&[swap_serial_num.into(), swap_count_word.into()]);
+
+    p2id_serial_num.into()
 }
