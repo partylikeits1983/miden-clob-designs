@@ -8,10 +8,10 @@ use miden_client::{
         NoteRecipient, NoteScript, NoteTag, NoteType,
     },
     transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
-    ClientError, Felt, Word,
+    ClientError, Felt,
 };
 
-use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
+use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
     create_basic_account, create_basic_faucet, create_p2id_note, initialize_client,
@@ -20,8 +20,8 @@ use miden_clob_designs::common::{
 
 #[tokio::test]
 async fn p2id_output_test() -> Result<(), ClientError> {
+    // Reset the store and initialize the client.
     reset_store_sqlite().await;
-
     let mut client = initialize_client().await?;
     println!(
         "Client initialized successfully. Latest block: {}",
@@ -49,6 +49,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let faucet_id = faucet.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
+
     let tx_req = TransactionRequestBuilder::mint_fungible_asset(
         mint_amount,
         alice_account.id(),
@@ -60,10 +61,9 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
-    let p2id_note = if let OutputNote::Full(note) = tx_exec.created_notes().get_note(0) {
-        note.clone()
-    } else {
-        panic!("Expected OutputNote::Full");
+    let p2id_note = match tx_exec.created_notes().get_note(0) {
+        OutputNote::Full(note) => note.clone(),
+        _ => panic!("Expected OutputNote::Full"),
     };
 
     sleep(Duration::from_secs(3)).await;
@@ -82,17 +82,13 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     // STEP 3: Create custom note
     // -------------------------------------------------------------------------
     println!("\n[STEP 3] Create custom note");
-    let mut secret_vals = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
-    secret_vals.splice(0..0, Word::default().iter().cloned());
-    let digest = Hasher::hash_elements(&secret_vals);
-    println!("digest: {:?}", digest);
 
     let assembler = TransactionKernel::assembler().with_debug_mode(true);
     let code = fs::read_to_string(Path::new("./masm/notes/p2id_output_test.masm")).unwrap();
     let rng = client.rng();
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
-    let note_inputs = NoteInputs::new(digest.to_vec()).unwrap();
+    let note_inputs = NoteInputs::new(vec![]).unwrap();
     let recipient = NoteRecipient::new(serial_num, note_script, note_inputs);
     let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
@@ -118,7 +114,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_result.executed_transaction().id()
     );
-    let _ = client.submit_transaction(tx_result).await;
+    client.submit_transaction(tx_result).await?;
     client.sync_state().await?;
 
     wait_for_notes(&mut client, &bob_account, 1).await?;
@@ -129,7 +125,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let p2id_note_asset = FungibleAsset::new(faucet.id(), 50).unwrap();
     let p2id_serial_num = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
 
-    // P2ID note that will be created in MASM
+    // Create the P2ID note that will be created in MASM.
     let p2id_note = create_p2id_note(
         bob_account.id(),
         alice_account.id(),
@@ -144,8 +140,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     println!("p2id aux: {:?}", p2id_note.metadata().aux());
     println!("p2id note type: {:?}", p2id_note.metadata().note_type());
     println!("p2id hint: {:?}", p2id_note.metadata().execution_hint());
-    println!("recipient; {:?}", p2id_note.recipient().digest());
-
+    println!("recipient: {:?}", p2id_note.recipient().digest());
     println!("p2id asset: {:?}", p2id_note.assets());
 
     let note_tag_input: u64 = p2id_note.metadata().tag().into();
@@ -161,7 +156,6 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args))])
         .with_expected_output_notes(vec![p2id_note])
-        // .with_expected_future_notes(vec![(p2id_note.clone().into(), p2id_note.metadata().tag())])
         .build();
 
     let tx_result = client
@@ -173,7 +167,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         tx_result.executed_transaction().id()
     );
     println!("account delta: {:?}", tx_result.account_delta().vault());
-    let _ = client.submit_transaction(tx_result).await;
+    client.submit_transaction(tx_result).await?;
 
     Ok(())
 }
