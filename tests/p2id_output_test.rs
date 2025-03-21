@@ -121,11 +121,15 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let _ = client.submit_transaction(tx_result).await;
     client.sync_state().await?;
 
+    wait_for_notes(&mut client, &bob_account, 1).await?;
+
     // -------------------------------------------------------------------------
     // STEP 4: Consume the Custom Note
     // -------------------------------------------------------------------------
     let p2id_note_asset = FungibleAsset::new(faucet.id(), 50).unwrap();
     let p2id_serial_num = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
+    
+    // P2ID note that will be created in MASM
     let p2id_note = create_p2id_note(
         bob_account.id(),
         alice_account.id(),
@@ -140,7 +144,6 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     println!("script hash: {:?}", p2id_note.script().hash());
     println!("note id:{:?}", p2id_note.id());
 
-    wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note & Outputs P2ID Note for Alice");
     let note_args = [
         alice_account.id().prefix().as_felt(),
@@ -153,6 +156,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         .with_expected_output_notes(vec![p2id_note])
         // .with_expected_future_notes(vec![(p2id_note.clone().into(), p2id_note.metadata().tag())])
         .build();
+
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
         .await
