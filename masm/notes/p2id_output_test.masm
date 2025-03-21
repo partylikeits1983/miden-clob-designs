@@ -1,6 +1,12 @@
 use.miden::note
 use.miden::contracts::wallets::basic->wallet
 
+const.ASSET=0
+const.ASSET_HALF=4
+const.ACCOUNT_ID_PREFIX=16
+const.ACCOUNT_ID_SUFFIX=17
+const.P2ID_TAG=60
+
 #! Inputs: [SERIAL_NUM, SCRIPT_HASH]
 proc.build_p2id_recipient_hash
     padw hmerge
@@ -10,19 +16,19 @@ proc.build_p2id_recipient_hash
     # => [SERIAL_SCRIPT_HASH]
 
     padw
-    mem_load.17 mem_load.16
+    mem_load.ACCOUNT_ID_SUFFIX
+    mem_load.ACCOUNT_ID_PREFIX
     push.0.0
-    # => [prefix, suffix, 0, 0, EMPTY_WORD, SERIAL_SCRIPT_HASH]
+    # => [0, 0, prefix, suffix, EMPTY_WORD, SERIAL_SCRIPT_HASH]
 
-    push.16 mem_storew dropw
+    push.ACCOUNT_ID_PREFIX mem_storew dropw
     push.20 mem_storew dropw
 
     push.8.16
+    # => [ptr, elements]
 
     exec.note::compute_inputs_hash
     # => [INPUTS_HASH, SERIAL_SCRIPT_HASH]
-
-    push.333 debug.stack drop
 
     hmerge
     # => [P2ID_RECIPIENT]
@@ -30,31 +36,25 @@ end
 
 begin
     # => [account_prefix, account_suffix, tag]
-
-    mem_store.16
-    mem_store.17
-    mem_store.60
-
-    debug.mem.16.18 debug.mem.60
+    mem_store.ACCOUNT_ID_PREFIX
+    mem_store.ACCOUNT_ID_SUFFIX
+    mem_store.P2ID_TAG
 
     # get asset
-    push.0 exec.note::get_assets drop drop
+    push.ASSET exec.note::get_assets drop drop
     # => []
 
-    mem_loadw.0
+    mem_loadw.ASSET
     # => [ASSET]
 
-    # store asset @ mem addr 4
-    mem_storew.4
-
     swap.3 push.2 div swap.3
-    # => [ASSET / 2]
+    # => [ASSET_HALF]
 
-    # store ASSET / 2 @ mem addr 0
-    mem_storew.0 dropw
+    # store ASSET_HALF @ mem addr 0
+    mem_storew.ASSET_HALF dropw
     # => []
 
-    mem_loadw.4
+    mem_loadw.ASSET
     # => [ASSET]
 
     call.wallet::receive_asset
@@ -74,25 +74,18 @@ begin
     push.1.1.0
     # => [aux, public_note, execution_hint_always, P2ID_RECIPIENT]
 
-    # push.3267624960
-    mem_load.60
+    mem_load.P2ID_TAG
     # => [tag, aux, note_type, execution_hint, RECIPIENT]
-
-    push.555 debug.stack drop
 
     call.wallet::create_note
     # => [note_idx, pad(15) ...]
 
-    padw mem_loadw.0
+    padw mem_loadw.ASSET_HALF
     # => [ASSET / 2, note_idx]
-
-    push.777 debug.stack drop
 
     call.wallet::move_asset_to_note
     # => [ASSET, note_idx, pad(11)]
 
     dropw dropw dropw dropw
     # => []
-
-    push.999 debug.stack drop
 end
