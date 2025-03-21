@@ -238,7 +238,7 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
         faucet_b.id().suffix()
     );
 
-    let consume_amount_note_args = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(25)];
+    let _consume_amount_note_args = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(25)];
 
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(swapp_note.id(), None)])
