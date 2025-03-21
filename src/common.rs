@@ -259,6 +259,7 @@ pub fn create_partial_swap_note(
 
     let requested_asset_word: Word = requested_asset.into();
     let swapp_tag = build_swap_tag(note_type, &offered_asset, &requested_asset)?;
+    let p2id_tag = NoteTag::from_account_id(creator, NoteExecutionMode::Local)?;
 
     let inputs = NoteInputs::new(vec![
         requested_asset_word[0],
@@ -266,7 +267,7 @@ pub fn create_partial_swap_note(
         requested_asset_word[2],
         requested_asset_word[3],
         swapp_tag.inner().into(),
-        Felt::new(0),
+        p2id_tag.into(),
         Felt::new(0),
         Felt::new(0),
         Felt::new(swap_count),

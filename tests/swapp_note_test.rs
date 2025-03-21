@@ -197,10 +197,10 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), asset_amount_b_out).unwrap();
     let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count_1);
 
-    println!("swapp serial num 1: {:?}", swap_serial_num_1);
+    /*     println!("swapp serial num 1: {:?}", swap_serial_num_1);
     println!("swapp recipient: {:?}", swapp_note_1.recipient().digest());
     println!("swapp' tag: {:?}", swapp_note.metadata().tag());
-    // println!("p2id serial num: {:?}", p2id_serial_num_1);
+    // println!("p2id serial num: {:?}", p2id_serial_num_1); */
 
     let p2id_note = create_p2id_note(
         bob_account.id(),
@@ -212,13 +212,12 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     )
     .unwrap();
 
-    println!("p2id recipient: {:?}", p2id_note.recipient().digest());
-    println!("p2id script hash: {:?}", p2id_note.script().hash());
-
-    println!("P2id num: {:?}", p2id_note.id());
     println!("p2id tag: {:?}", p2id_note.metadata().tag());
-
-    println!("swapp num: {:?}", swapp_note_1.id());
+    println!("p2id aux: {:?}", p2id_note.metadata().aux());
+    println!("p2id note type: {:?}", p2id_note.metadata().note_type());
+    println!("p2id hint: {:?}", p2id_note.metadata().execution_hint());
+    println!("recipient: {:?}", p2id_note.recipient().digest());
+    println!("p2id asset: {:?}", p2id_note.assets());
 
     let _ = client.sync_state().await;
 
