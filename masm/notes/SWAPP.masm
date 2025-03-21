@@ -473,7 +473,7 @@ proc.execute_SWAPp
 
     push.202 debug.stack drop
 
-    call.wallet::create_note
+    call.wallet::create_note drop
     # => [note_idx, pad(15) ...]
 
     mem_load.AMT_TOKENS_B_IN

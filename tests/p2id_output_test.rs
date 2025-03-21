@@ -33,13 +33,13 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
     let alice_account = create_basic_account(&mut client).await?;
-    println!("Alice's account ID: {:?}", alice_account.id().to_hex());
+    println!("Alice's account ID: {:?}", alice_account.id());
     let bob_account = create_basic_account(&mut client).await?;
-    println!("Bob's account ID: {:?}", bob_account.id().to_hex());
+    println!("Bob's account ID: {:?}", bob_account.id());
 
     println!("\nDeploying a new fungible faucet.");
     let faucet = create_basic_faucet(&mut client).await?;
-    println!("Faucet account ID: {:?}", faucet.id().to_hex());
+    println!("Faucet account ID: {:?}", faucet.id());
     client.sync_state().await?;
 
     // -------------------------------------------------------------------------
@@ -138,18 +138,20 @@ async fn p2id_output_test() -> Result<(), ClientError> {
 
     println!("recipient; {:?}", p2id_note.recipient().digest());
     println!("script hash: {:?}", p2id_note.script().hash());
-    
+    println!("note id:{:?}", p2id_note.id());
 
     wait_for_notes(&mut client, &bob_account, 1).await?;
-    println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
+    println!("\n[STEP 4] Bob consumes the Custom Note & Outputs P2ID Note for Alice");
     let note_args = [
-        bob_account.id().prefix().as_felt(),
-        bob_account.id().suffix(),
+        alice_account.id().prefix().as_felt(),
+        alice_account.id().suffix(),
         Felt::new(0),
         Felt::new(0),
     ];
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args))])
+        .with_expected_output_notes(vec![p2id_note])
+        // .with_expected_future_notes(vec![(p2id_note.clone().into(), p2id_note.metadata().tag())])
         .build();
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
