@@ -10,7 +10,7 @@ proc.build_p2id_recipient_hash
     # => [SERIAL_SCRIPT_HASH]
 
     padw
-    mem_load.16 mem_load.17
+    mem_load.17 mem_load.16
     push.0.0
     # => [prefix, suffix, 0, 0, EMPTY_WORD, SERIAL_SCRIPT_HASH]
 
@@ -22,13 +22,20 @@ proc.build_p2id_recipient_hash
     exec.note::compute_inputs_hash
     # => [INPUTS_HASH, SERIAL_SCRIPT_HASH]
 
+    push.333 debug.stack drop
+
     hmerge
     # => [P2ID_RECIPIENT]
 end
 
 begin
-    # => [account_prefix, account_suffix]
-    mem_storew.16 dropw
+    # => [account_prefix, account_suffix, tag]
+
+    mem_store.16
+    mem_store.17
+    mem_store.60
+
+    debug.mem.16.18 debug.mem.60
 
     # get asset
     push.0 exec.note::get_assets drop drop
@@ -67,7 +74,8 @@ begin
     push.1.1.0
     # => [aux, public_note, execution_hint_always, P2ID_RECIPIENT]
 
-    push.4108976128
+    # push.3267624960
+    mem_load.60
     # => [tag, aux, note_type, execution_hint, RECIPIENT]
 
     push.555 debug.stack drop
@@ -85,4 +93,6 @@ begin
 
     dropw dropw dropw dropw
     # => []
+
+    push.999 debug.stack drop
 end

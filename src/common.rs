@@ -317,7 +317,7 @@ pub fn create_p2id_note(
 
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
 
-    let inputs = NoteInputs::new(vec![target.prefix().into(), target.suffix().into()])?;
+    let inputs = NoteInputs::new(vec![target.suffix(), target.prefix().into()])?;
     let tag = NoteTag::from_account_id(target, NoteExecutionMode::Local)?;
 
     let metadata = NoteMetadata::new(sender, note_type, tag, NoteExecutionHint::always(), aux)?;

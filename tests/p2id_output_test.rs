@@ -128,7 +128,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     let p2id_note_asset = FungibleAsset::new(faucet.id(), 50).unwrap();
     let p2id_serial_num = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
-    
+
     // P2ID note that will be created in MASM
     let p2id_note = create_p2id_note(
         bob_account.id(),
@@ -140,16 +140,23 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     )
     .unwrap();
 
+    println!("p2id tag: {:?}", p2id_note.metadata().tag());
+    println!("p2id aux: {:?}", p2id_note.metadata().aux());
+    println!("p2id note type: {:?}", p2id_note.metadata().note_type());
+    println!("p2id hint: {:?}", p2id_note.metadata().execution_hint());
     println!("recipient; {:?}", p2id_note.recipient().digest());
-    println!("script hash: {:?}", p2id_note.script().hash());
-    println!("note id:{:?}", p2id_note.id());
+
+    println!("p2id asset: {:?}", p2id_note.assets());
+
+    let note_tag_input: u64 = p2id_note.metadata().tag().into();
+    println!("input tag: {:?}", note_tag_input);
 
     println!("\n[STEP 4] Bob consumes the Custom Note & Outputs P2ID Note for Alice");
     let note_args = [
-        alice_account.id().prefix().as_felt(),
+        Felt::new(0),
+        Felt::new(note_tag_input),
         alice_account.id().suffix(),
-        Felt::new(0),
-        Felt::new(0),
+        alice_account.id().prefix().as_felt(),
     ];
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args))])
