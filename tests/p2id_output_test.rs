@@ -1,3 +1,4 @@
+use miden_objects::note::NoteDetails;
 use std::{fs, path::Path};
 use tokio::time::{sleep, Duration};
 
@@ -128,7 +129,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     let p2id_note_asset = FungibleAsset::new(faucet.id(), 50).unwrap();
     let p2id_serial_num = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
-    
+
     // P2ID note that will be created in MASM
     let p2id_note = create_p2id_note(
         bob_account.id(),
@@ -142,18 +143,21 @@ async fn p2id_output_test() -> Result<(), ClientError> {
 
     println!("recipient; {:?}", p2id_note.recipient().digest());
     println!("script hash: {:?}", p2id_note.script().hash());
-    println!("note id:{:?}", p2id_note.id());
+    println!("note id: {:?}", p2id_note.id());
+    println!("note metadata: {:?}", p2id_note.metadata());
 
     println!("\n[STEP 4] Bob consumes the Custom Note & Outputs P2ID Note for Alice");
     let note_args = [
-        alice_account.id().prefix().as_felt(),
+        Felt::new(0),
         alice_account.id().suffix(),
-        Felt::new(0),
-        Felt::new(0),
+        alice_account.id().prefix().as_felt(),
+        p2id_note.metadata().tag().into(),
     ];
+
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args))])
-        .with_expected_output_notes(vec![p2id_note])
+        .with_expected_output_notes(vec![p2id_note.clone()])
+        //.extend_advice_map([(p2id_note.recipient().digest(), p2id_note.recipient().to_elements())])
         // .with_expected_future_notes(vec![(p2id_note.clone().into(), p2id_note.metadata().tag())])
         .build();
 
@@ -161,6 +165,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         .new_transaction(bob_account.id(), consume_custom_req)
         .await
         .unwrap();
+
     println!(
         "Consumed Note Tx on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_result.executed_transaction().id()

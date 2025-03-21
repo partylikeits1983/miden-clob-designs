@@ -10,9 +10,11 @@ proc.build_p2id_recipient_hash
     # => [SERIAL_SCRIPT_HASH]
 
     padw
-    mem_load.16 mem_load.17
+    # => [EMPTY_WORD, SERIAL_SCRIPT_HASH]
+
     push.0.0
-    # => [prefix, suffix, 0, 0, EMPTY_WORD, SERIAL_SCRIPT_HASH]
+    mem_load.17 mem_load.16
+    # => [account_suffix, account_prefix, 0, 0, EMPTY_WORD, SERIAL_SCRIPT_HASH]
 
     push.16 mem_storew dropw
     push.20 mem_storew dropw
@@ -27,7 +29,10 @@ proc.build_p2id_recipient_hash
 end
 
 begin
-    # => [account_prefix, account_suffix]
+    # => [tag, account_prefix, account_suffix, 0]
+    debug.stack
+    mem_store.100
+    debug.stack
     mem_storew.16 dropw
 
     # get asset
@@ -67,7 +72,7 @@ begin
     push.1.1.0
     # => [aux, public_note, execution_hint_always, P2ID_RECIPIENT]
 
-    push.4108976128
+    mem_load.100
     # => [tag, aux, note_type, execution_hint, RECIPIENT]
 
     push.555 debug.stack drop
