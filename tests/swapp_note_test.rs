@@ -170,7 +170,7 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     let amount_a_1 = 25;
     let asset_a_1 = FungibleAsset::new(faucet_a.id(), amount_a_1).unwrap();
 
-    // bob sent 100 b tokens to alice
+    // bob sent 25 b tokens to alice
     let amount_b_1 = 25;
     let asset_b_1 = FungibleAsset::new(faucet_b.id(), amount_b_1).unwrap();
 
@@ -197,11 +197,6 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), asset_amount_b_out).unwrap();
     let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count_1);
 
-    /*     println!("swapp serial num 1: {:?}", swap_serial_num_1);
-    println!("swapp recipient: {:?}", swapp_note_1.recipient().digest());
-    println!("swapp' tag: {:?}", swapp_note.metadata().tag());
-    // println!("p2id serial num: {:?}", p2id_serial_num_1); */
-
     let p2id_note = create_p2id_note(
         bob_account.id(),
         alice_account.id(),
@@ -211,13 +206,6 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
         p2id_serial_num_1,
     )
     .unwrap();
-
-    println!("p2id tag: {:?}", p2id_note.metadata().tag());
-    println!("p2id aux: {:?}", p2id_note.metadata().aux());
-    println!("p2id note type: {:?}", p2id_note.metadata().note_type());
-    println!("p2id hint: {:?}", p2id_note.metadata().execution_hint());
-    println!("recipient: {:?}", p2id_note.recipient().digest());
-    println!("p2id asset: {:?}", p2id_note.assets());
 
     let _ = client.sync_state().await;
 
@@ -255,23 +243,5 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     println!("account delta: {:?}", tx_result.account_delta().vault());
     let _ = client.submit_transaction(tx_result).await;
 
-    /*     wait_for_notes(&mut client, &bob_account, 1).await?;
-       println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
-       let secret = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
-       let consume_custom_req = TransactionRequestBuilder::new()
-           .with_authenticated_input_notes([(swapp_note.id(), Some(secret))])
-           // .with_expected_output_notes(notes)
-           .build();
-       let tx_result = client
-           .new_transaction(bob_account.id(), consume_custom_req)
-           .await
-           .unwrap();
-       println!(
-           "Consumed Note Tx on MidenScan: https://testnet.midenscan.com/tx/{:?}",
-           tx_result.executed_transaction().id()
-       );
-       println!("account delta: {:?}", tx_result.account_delta().vault());
-       let _ = client.submit_transaction(tx_result).await;
-    */
     Ok(())
 }
