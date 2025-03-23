@@ -2,12 +2,15 @@
 
 this repo tests and benchmarks various CLOB designs on Miden
 
-running tests:
-
+running basic swapp test:
 ```bash
 cargo test --release  swap_note_partial_consume_test -- --nocapture
 ```
 
+running optimistic consumption swapp test:
+```bash
+cargo test --release  partial_swap_ephemeral_chain_benchmark -- --nocapture
+```
 
 Formatting masm:
 ```
