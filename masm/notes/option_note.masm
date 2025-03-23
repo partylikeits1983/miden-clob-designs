@@ -1,0 +1,78 @@
+use.miden::note
+use.miden::account
+# use.miden::contracts::wallets::basic->wallet
+
+# CALL / PUT OPTION CONTRACT (SWAP_T_R)
+
+# Memory Addresses
+# =================================================================================================
+
+# SWAPP Note Inputs (0 to 40)
+const.PAYBACK_RECIPIENT_INPUT = 0x0000
+const.PAYBACK_RECIPIENT_INPUT_1 = 0x0001
+const.PAYBACK_RECIPIENT_INPUT_2 = 0x0002
+const.PAYBACK_RECIPIENT_INPUT_3 = 0x0003
+const.REQUESTED_ASSET_INPUT = 0x0004
+const.REQUESTED_ASSET_1 = 0x0005
+const.REQUESTED_ASSET_2 = 0x0006
+const.REQUESTED_ASSET_3 = 0x0007
+
+const.PAYBACK_TAG_INPUT=8
+const.EXECUTION_HINT_INPUT=9
+const.UNDERWRITER_ID_PREFIX=10
+const.UNDERWRITER_ID_SUFFIX=11
+const.BUYER_ID_PREFIX=12
+const.BUYER_ID_SUFFIX=13
+const.EXPIRATION=14
+const.IS_EUROPEAN=15
+
+proc.is_underwriter
+    exec.account::get_id
+    # => [prefix, suffix]
+
+    mem_load.UNDERWRITER_ID_PREFIX
+    # => [writer_prefix, prefix, suffix]
+
+    eq
+    if.true
+        mem_load.UNDERWRITER_ID_SUFFIX
+        eq
+    else
+        drop push.0
+    end
+    # => [is_underwriter]
+end
+
+proc.is_option_buyer
+    exec.account::get_id
+    # => [prefix, suffix]
+
+    mem_load.BUYER_ID_PREFIX
+    # => [writer_prefix, prefix, suffix]
+
+    eq
+    if.true
+        mem_load.BUYER_ID_SUFFIX
+        eq
+    else
+        drop push.0
+    end
+    # => [is_option_buyer]
+end
+
+begin
+    push.0 exec.note::get_inputs drop drop
+
+    push.111 debug.stack debug.mem drop
+
+    exec.is_underwriter
+    push.404 debug.stack drop
+
+    exec.is_option_buyer
+    push.505 debug.stack drop
+
+    # exec.memory::get_blk_timestamp
+    # assert blk_timestamp >= expiration
+
+    dropw
+end

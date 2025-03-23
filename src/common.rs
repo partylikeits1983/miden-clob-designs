@@ -1,8 +1,14 @@
-use rand::Rng;
-use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 use std::{fs, path::PathBuf, sync::Arc};
+
+use rand::Rng;
+use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
+
 use tokio::time::{sleep, Duration};
+
+use miden_assembly::{
+    ast::{Module, ModuleKind},
+    LibraryPath,
+};
 
 use miden_client::{
     account::{
@@ -21,19 +27,15 @@ use miden_client::{
     Client, ClientError, Felt,
 };
 
+use miden_lib::note::{utils, utils::build_swap_tag};
+
 use miden_objects::{
     account::{AccountId, AuthSecretKey},
     assembly::{Assembler, DefaultSourceManager},
     asset::Asset,
-    crypto::dsa::rpo_falcon512::SecretKey,
+    crypto::{dsa::rpo_falcon512::SecretKey, rand::FeltRng},
+    note::NoteDetails,
     Hasher, Word,
-};
-
-use miden_lib::note::utils::build_swap_tag;
-
-use miden_assembly::{
-    ast::{Module, ModuleKind},
-    LibraryPath,
 };
 
 pub async fn initialize_client() -> Result<Client<RpoRandomCoin>, ClientError> {
@@ -354,4 +356,84 @@ pub fn get_p2id_serial_num(swap_serial_num: [Felt; 4], swap_count: u64) -> [Felt
     let p2id_serial_num = Hasher::merge(&[swap_serial_num.into(), swap_count_word.into()]);
 
     p2id_serial_num.into()
+}
+
+/// Generates a SWAP note - swap of assets between two accounts - and returns the note as well as
+/// [NoteDetails] for the payback note.
+///
+/// This script enables a swap of 2 assets between the `sender` account and any other account that
+/// is willing to consume the note. The consumer will receive the `offered_asset` and will create a
+/// new P2ID note with `sender` as target, containing the `requested_asset`.
+///
+/// # Errors
+/// Returns an error if deserialization or compilation of the `SWAP` script fails.
+pub fn create_option_contract_note<R: FeltRng>(
+    underwriter: AccountId,
+    buyer: AccountId,
+    offered_asset: Asset,
+    requested_asset: Asset,
+    expiration: u64,
+    is_european: bool,
+    note_type: NoteType,
+    aux: Felt,
+    rng: &mut R,
+) -> Result<(Note, NoteDetails), NoteError> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let path: PathBuf = [manifest_dir, "masm", "notes", "option_note.masm"]
+        .iter()
+        .collect();
+
+    let note_code = fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("Error reading {}: {}", path.display(), err));
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
+    let note_script = NoteScript::compile(note_code, assembler).unwrap();
+    let note_type = NoteType::Public;
+
+    let payback_serial_num = rng.draw_word();
+    let payback_recipient = utils::build_p2id_recipient(underwriter, payback_serial_num)?;
+
+    let payback_recipient_word: Word = payback_recipient.digest().into();
+    let requested_asset_word: Word = requested_asset.into();
+    let payback_tag = NoteTag::from_account_id(underwriter, NoteExecutionMode::Local)?;
+
+    let inputs = NoteInputs::new(vec![
+        payback_recipient_word[0],
+        payback_recipient_word[1],
+        payback_recipient_word[2],
+        payback_recipient_word[3],
+        requested_asset_word[0],
+        requested_asset_word[1],
+        requested_asset_word[2],
+        requested_asset_word[3],
+        payback_tag.inner().into(),
+        NoteExecutionHint::always().into(),
+        underwriter.prefix().into(),
+        underwriter.suffix().into(),
+        buyer.prefix().into(),
+        buyer.suffix(),
+        Felt::new(expiration),
+        Felt::new(is_european as u64),
+    ])?;
+
+    // build the tag for the SWAP use case
+    let tag = build_swap_tag(note_type, &offered_asset, &requested_asset)?;
+    let serial_num = rng.draw_word();
+
+    // build the outgoing note
+    let metadata = NoteMetadata::new(
+        underwriter,
+        note_type,
+        tag,
+        NoteExecutionHint::always(),
+        aux,
+    )?;
+    let assets = NoteAssets::new(vec![offered_asset])?;
+    let recipient = NoteRecipient::new(serial_num, note_script, inputs);
+    let note = Note::new(assets, metadata, recipient);
+
+    // build the payback note details
+    let payback_assets = NoteAssets::new(vec![requested_asset])?;
+    let payback_note = NoteDetails::new(payback_assets, payback_recipient);
+
+    Ok((note, payback_note))
 }
