@@ -71,7 +71,6 @@ end
 #! Outputs: []
 #!
 proc.handle_underwriter_reclaim
-
     # exec.memory::get_blk_timestamp
     # assert blk_timestamp >= expiration
     # 03/23/2025

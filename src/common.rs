@@ -27,14 +27,13 @@ use miden_client::{
     Client, ClientError, Felt,
 };
 
-use miden_lib::note::{utils, utils::build_swap_tag};
+use miden_lib::note::utils::build_swap_tag;
 
 use miden_objects::{
     account::{AccountId, AuthSecretKey},
     assembly::{Assembler, DefaultSourceManager},
     asset::Asset,
     crypto::{dsa::rpo_falcon512::SecretKey, rand::FeltRng},
-    note::NoteDetails,
     Hasher, Word,
 };
 
@@ -378,7 +377,7 @@ pub fn create_option_contract_note<R: FeltRng>(
     rng: &mut R,
 ) -> Result<(Note, Note), NoteError> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let path: PathBuf = [manifest_dir, "masm", "notes", "option_note.masm"]
+    let path: PathBuf = [manifest_dir, "masm", "notes", "option_contract_note.masm"]
         .iter()
         .collect();
 
