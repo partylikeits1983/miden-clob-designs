@@ -1,6 +1,6 @@
 use.miden::note
 use.miden::account
-# use.miden::contracts::wallets::basic->wallet
+use.miden::contracts::wallets::basic->wallet
 
 # CALL / PUT OPTION CONTRACT (SWAP_T_R)
 
@@ -16,7 +16,6 @@ const.REQUESTED_ASSET_INPUT = 0x0004
 const.REQUESTED_ASSET_1 = 0x0005
 const.REQUESTED_ASSET_2 = 0x0006
 const.REQUESTED_ASSET_3 = 0x0007
-
 const.PAYBACK_TAG_INPUT=8
 const.EXECUTION_HINT_INPUT=9
 const.UNDERWRITER_ID_PREFIX=10
@@ -24,7 +23,12 @@ const.UNDERWRITER_ID_SUFFIX=11
 const.BUYER_ID_PREFIX=12
 const.BUYER_ID_SUFFIX=13
 const.EXPIRATION=14
-const.IS_EUROPEAN=15
+
+# temp addresses
+const.IS_EXPIRED=40
+
+# ERRORS
+const.NOT_EXPIRED=100
 
 proc.is_underwriter
     exec.account::get_id
@@ -60,19 +64,88 @@ proc.is_option_buyer
     # => [is_option_buyer]
 end
 
+#! Sends Assets in Note to Consuming Account
+#!
+#! Inputs: []
+#! Outputs: []
+#!
+proc.handle_underwriter_reclaim
+
+    # exec.memory::get_blk_timestamp
+    # assert blk_timestamp >= expiration
+    # 03/23/2025
+    push.1742747731
+
+    push.86400 add
+
+    mem_load.EXPIRATION
+    # => [expiration, timestamp + 86400]
+
+    gt assert
+
+    push.0 exec.note::get_assets
+
+    mem_loadw.0
+
+    call.wallet::receive_asset
+
+    dropw
+end
+
+#! Checks if Option Contract is Consumable
+#! Panics if blk_timestamp < expiration
+#!
+#! Inputs: []
+#! Outputs: []
+#!
+proc.is_consumable
+    # exec.memory::get_blk_timestamp
+    # assert blk_timestamp >= expiration
+    # 03/23/2025
+    push.1742747731
+    # => [timestamp]
+
+    mem_load.EXPIRATION
+    # => [expiration, timestamp]
+
+    gt assert.err=NOT_EXPIRED
+    # => []
+end
+
+#! Ouputs P2ID Note Filling Option Contract
+#!
+#! Inputs: []
+#! Outputs: []
+#!
+proc.output_p2id
+    nop
+end
+
+# SWAP_T_R note
+# This is a standard swap note that cannot be consumed until after a specified time t
+# And is reclaimable by the creator at t + 1 day
 begin
     push.0 exec.note::get_inputs drop drop
 
     push.111 debug.stack debug.mem drop
 
-    exec.is_underwriter
-    push.404 debug.stack drop
+    exec.is_consumable
+    # => []
 
     exec.is_option_buyer
-    push.505 debug.stack drop
+    # => [is_buyer]
+    if.true
+        # handle swap
+        exec.output_p2id
+    else
+        exec.is_underwriter
+        if.true
+            exec.handle_underwriter_reclaim
+            # => []
+        else
+            push.0 assert
+            # => [panic]
+        end
+    end
 
-    # exec.memory::get_blk_timestamp
-    # assert blk_timestamp >= expiration
-
-    dropw
 end
