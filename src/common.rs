@@ -439,3 +439,38 @@ pub fn create_option_contract_note<R: FeltRng>(
 
     Ok((note, p2id_note))
 }
+
+/// Computes the amount that will go out given `requested_asset_available`,
+/// and returns both the partial-fill amounts and the new remaining amounts.
+///
+/// Formulas:
+///   amount_out = offered_asset_amount / requested_asset_amount * requested_asset_available
+///   new_offered_asset_amount = offered_asset_amount - amount_out
+///   new_requested_asset_amount = requested_asset_amount - requested_asset_available
+///
+/// Returns a tuple of: (amount_out, requested_asset_available, new_offered_asset_amount, new_requested_asset_amount).
+pub fn compute_partial_swapp(
+    offered_asset_amount: u64,
+    requested_asset_amount: u64,
+    requested_asset_available: u64,
+) -> (u64, u64, u64, u64) {
+    // amount of "A" that should be sent out on this partial fill
+    let amount_out = offered_asset_amount
+        .saturating_mul(requested_asset_available)
+        .saturating_div(requested_asset_amount);
+
+    // reduce the original offer and request by the partial fill amounts
+    let new_offered_asset_amount = offered_asset_amount.saturating_sub(amount_out);
+    let new_requested_asset_amount =
+        requested_asset_amount.saturating_sub(requested_asset_available);
+
+    // The partial fill for the B side is just `requested_asset_available`.
+    // So the second item in the returned tuple is the amount of B that is paid in,
+    // and the first item is how many A tokens go to the counterparty.
+    (
+        amount_out,
+        requested_asset_available,
+        new_offered_asset_amount,
+        new_requested_asset_amount,
+    )
+}

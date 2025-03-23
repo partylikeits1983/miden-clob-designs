@@ -10,8 +10,9 @@ use miden_client::{
 use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_p2id_note, create_partial_swap_note,
-    get_p2id_serial_num, get_swapp_note, initialize_client, reset_store_sqlite, wait_for_notes,
+    compute_partial_swapp, create_basic_account, create_basic_faucet, create_p2id_note,
+    create_partial_swap_note, get_p2id_serial_num, get_swapp_note, initialize_client,
+    reset_store_sqlite, wait_for_notes,
 };
 
 #[tokio::test]
@@ -121,9 +122,11 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     println!("\n[STEP 3] Create SWAPP note");
 
+    // offered asset amount
     let amount_a = 50;
     let asset_a = FungibleAsset::new(faucet_a.id(), amount_a).unwrap();
 
+    // requested asset amount
     let amount_b = 50;
     let asset_b = FungibleAsset::new(faucet_b.id(), amount_b).unwrap();
 
@@ -161,18 +164,15 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
 
     let _ = get_swapp_note(&mut client, swapp_tag, swapp_note_id).await;
 
-    // -------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------
     // STEP 4: Partial Consume SWAPP note
-    // -------------------------------------------------------------------------
+    // -----------------------------------------------------------------------------
 
-    // compute future output notes
-    // exchange rate alice set of a:b is 1:1
-    let amount_a_1 = 25;
-    let asset_a_1 = FungibleAsset::new(faucet_a.id(), amount_a_1).unwrap();
-
-    // bob sent 25 b tokens to alice
-    let amount_b_1 = 25;
-    let asset_b_1 = FungibleAsset::new(faucet_b.id(), amount_b_1).unwrap();
+    let (_amount_a_1, amount_b_1, new_amount_a, new_amount_b) = compute_partial_swapp(
+        /* originally offered A */ amount_a,
+        /* originally requested B */ amount_b,
+        /* Bob's actual fill of B */ amount_b_bob_wallet,
+    );
 
     let swap_serial_num_1 = [
         swap_serial_num[0],
@@ -182,19 +182,23 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
     ];
     let swap_count_1 = swap_count + 1;
 
+    // This new SWAPP note reflects the leftover portion of Alice’s original order.
     let swapp_note_1 = create_partial_swap_note(
         alice_account.id(),
         bob_account.id(),
-        asset_a_1.into(),
-        asset_b_1.into(),
+        FungibleAsset::new(faucet_a.id(), new_amount_a)
+            .unwrap()
+            .into(),
+        FungibleAsset::new(faucet_b.id(), new_amount_b)
+            .unwrap()
+            .into(),
         swap_serial_num_1,
         swap_count_1,
     )
     .unwrap();
 
-    // Build P2ID note
-    let asset_amount_b_out = 25;
-    let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), asset_amount_b_out).unwrap();
+    // Build P2ID note for Bob’s partial fill amount going to Alice:
+    let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), amount_b_1).unwrap();
     let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count_1);
 
     let p2id_note = create_p2id_note(
@@ -209,26 +213,18 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
 
     let _ = client.sync_state().await;
 
-    // -------------------------------------------------------------------------
-    // STEP 4: Partial Consume SWAPP note
-    // -------------------------------------------------------------------------
     println!("CONSUMING NOTE");
 
-    println!(
-        "faucet A id: prefix: {:?} suffix: {:?}",
-        faucet_a.id().prefix(),
-        faucet_a.id().suffix()
-    );
-    println!(
-        "faucet B id: prefix: {:?} suffix: {:?}",
-        faucet_b.id().prefix(),
-        faucet_b.id().suffix()
-    );
-
-    let _consume_amount_note_args = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(25)];
+    // pass in amount to fill via note args
+    let consume_amount_note_args = [
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(amount_b_1),
+    ];
 
     let consume_custom_req = TransactionRequestBuilder::new()
-        .with_authenticated_input_notes([(swapp_note.id(), None)])
+        .with_authenticated_input_notes([(swapp_note.id(), Some(consume_amount_note_args))])
         .with_expected_output_notes(vec![p2id_note, swapp_note_1])
         .build();
 
@@ -236,12 +232,50 @@ async fn swap_note_partial_consume_test() -> Result<(), ClientError> {
         .new_transaction(bob_account.id(), consume_custom_req)
         .await
         .unwrap();
+
     println!(
         "Consumed Note Tx on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_result.executed_transaction().id()
     );
     println!("account delta: {:?}", tx_result.account_delta().vault());
+
     let _ = client.submit_transaction(tx_result).await;
+
+    println!("SWAPP note partially filled");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_compute_partial_swapp() -> Result<(), ClientError> {
+    let (amount_a_1, amount_b_1, new_amount_a, new_amount_b) = compute_partial_swapp(
+        100, // originally offered A
+        50,  // originally requested B
+        25,  // Bob fills 25 B
+    );
+
+    println!("==== test_compute_partial_swapp ====");
+    println!("amount_a_1 (A out):          {}", amount_a_1);
+    println!("amount_b_1 (B in):           {}", amount_b_1);
+    println!("new_amount_a (A leftover):   {}", new_amount_a);
+    println!("new_amount_b (B leftover):   {}", new_amount_b);
+
+    assert_eq!(amount_a_1, 50);
+    assert_eq!(amount_b_1, 25);
+    assert_eq!(new_amount_a, 50);
+    assert_eq!(new_amount_b, 25);
+
+    let (amount_a_1, amount_b_1, new_amount_a, new_amount_b) = compute_partial_swapp(
+        5000, // originally offered A
+        5000, // originally requested B
+        2500, // Bob fills 2500 B
+    );
+
+    // 1. For a 1:1 ratio: 2500 B in => 2500 A out => leftover 2500 A / 2500 B
+    assert_eq!(amount_a_1, 2500);
+    assert_eq!(amount_b_1, 2500);
+    assert_eq!(new_amount_a, 2500);
+    assert_eq!(new_amount_b, 2500);
 
     Ok(())
 }
