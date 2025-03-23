@@ -123,16 +123,15 @@ async fn option_contract_test() -> Result<(), ClientError> {
         .expect("Time went backwards")
         .as_secs();
     let one_month: u64 = 60 * 60 * 24 * 30;
-    let expiration = current_timestamp + one_month;
+    let expiration = current_timestamp - one_month;
 
-    let (option_contract_note, _p2id_payback_note_details) = create_option_contract_note(
+    let (option_contract_note, p2id_payback_note) = create_option_contract_note(
         alice_account.id(),
         bob_account.id(),
         offered_asset.into(),
         requested_asset.into(),
         expiration,
         true,
-        NoteType::Public,
         Felt::new(0),
         client.rng(),
     )
@@ -159,13 +158,15 @@ async fn option_contract_test() -> Result<(), ClientError> {
     client.sync_state().await?;
 
     // -------------------------------------------------------------------------
-    // STEP 4: Consume the Custom Note
+    // STEP 4: Consume the Options Contract Note
     // -------------------------------------------------------------------------
+
     wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
 
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(option_contract_note.id(), None)])
+        .with_expected_output_notes(vec![p2id_payback_note])
         .build();
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)

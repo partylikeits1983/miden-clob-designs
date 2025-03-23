@@ -374,10 +374,9 @@ pub fn create_option_contract_note<R: FeltRng>(
     requested_asset: Asset,
     expiration: u64,
     is_european: bool,
-    note_type: NoteType,
     aux: Felt,
     rng: &mut R,
-) -> Result<(Note, NoteDetails), NoteError> {
+) -> Result<(Note, Note), NoteError> {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let path: PathBuf = [manifest_dir, "masm", "notes", "option_note.masm"]
         .iter()
@@ -390,9 +389,17 @@ pub fn create_option_contract_note<R: FeltRng>(
     let note_type = NoteType::Public;
 
     let payback_serial_num = rng.draw_word();
-    let payback_recipient = utils::build_p2id_recipient(underwriter, payback_serial_num)?;
+    let p2id_note = create_p2id_note(
+        buyer,
+        underwriter,
+        vec![requested_asset.into()],
+        NoteType::Public,
+        Felt::new(0),
+        payback_serial_num,
+    )
+    .unwrap();
 
-    let payback_recipient_word: Word = payback_recipient.digest().into();
+    let payback_recipient_word: Word = p2id_note.recipient().digest().into();
     let requested_asset_word: Word = requested_asset.into();
     let payback_tag = NoteTag::from_account_id(underwriter, NoteExecutionMode::Local)?;
 
@@ -431,9 +438,5 @@ pub fn create_option_contract_note<R: FeltRng>(
     let recipient = NoteRecipient::new(serial_num, note_script, inputs);
     let note = Note::new(assets, metadata, recipient);
 
-    // build the payback note details
-    let payback_assets = NoteAssets::new(vec![requested_asset])?;
-    let payback_note = NoteDetails::new(payback_assets, payback_recipient);
-
-    Ok((note, payback_note))
+    Ok((note, p2id_note))
 }

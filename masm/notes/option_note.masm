@@ -23,6 +23,7 @@ const.UNDERWRITER_ID_SUFFIX=11
 const.BUYER_ID_PREFIX=12
 const.BUYER_ID_SUFFIX=13
 const.EXPIRATION=14
+const.IS_EUROPEAN=15
 
 # temp addresses
 const.IS_EXPIRED=40
@@ -112,18 +113,38 @@ proc.is_consumable
     # => []
 end
 
-#! Ouputs P2ID Note Filling Option Contract
+#! Ouputs P2ID Note
 #!
 #! Inputs: []
 #! Outputs: []
 #!
 proc.output_p2id
-    nop
+    mem_loadw.0
+    # => [RECIPIENT]
+
+    push.1.1.0
+    # => [aux, note_type, execution_hint, RECIPIENT]
+
+    mem_load.PAYBACK_TAG_INPUT
+    # => [tag, aux, note_type, execution_hint, RECIPIENT]
+
+    call.wallet::create_note
+    # => [note_idx, pad(15) ...]
+
+    mem_loadw.REQUESTED_ASSET_INPUT
+    # => [ASSET, note_idx]
+
+    call.wallet::move_asset_to_note
+    # => [ASSET, note_idx, pad(11)]
+
+    dropw drop
+    # => []
 end
 
 # SWAP_T_R note
 # This is a standard swap note that cannot be consumed until after a specified time t
 # And is reclaimable by the creator at t + 1 day
+# To be a true "options contract", the note would need to be able to be "sellable/settleable"
 begin
     push.0 exec.note::get_inputs drop drop
 
@@ -137,6 +158,16 @@ begin
     if.true
         # handle swap
         exec.output_p2id
+
+        # consume assets
+        push.0 exec.note::get_assets drop drop
+        # => []
+
+        mem_loadw.0
+        # => [ASSET]
+
+        call.wallet::receive_asset
+        # => []
     else
         exec.is_underwriter
         if.true
@@ -147,5 +178,4 @@ begin
             # => [panic]
         end
     end
-
 end
