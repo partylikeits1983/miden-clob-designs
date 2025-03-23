@@ -211,21 +211,12 @@ pub async fn get_swapp_note(
             println!("Found the note with ID: {:?}", swapp_note_id);
             break;
         }
-
-        // Otherwise, keep waiting
-        println!(
-            "No matching SWAPP note found yet. Currently have {} consumable notes. Waiting...",
-            notes.len()
-        );
-        sleep(Duration::from_secs(3)).await;
+        sleep(Duration::from_millis(100)).await;
     }
 
     Ok(())
 }
 
-/// @DEV MUST CHANGE LOGIC HERE
-///
-///
 // Partially Fillable SWAP note
 // ================================================================================================
 
@@ -278,8 +269,6 @@ pub fn create_partial_swap_note(
         creator.prefix().into(),
         creator.suffix().into(),
     ])?;
-
-    println!("SWAPP inputs: {:?}", inputs);
 
     let aux = Felt::new(0);
 
@@ -338,7 +327,7 @@ pub async fn reset_store_sqlite() {
         if let Err(e) = tokio::fs::remove_file(path).await {
             eprintln!("failed to remove {}: {}", path, e);
         } else {
-            println!("deleted store: {}", path);
+            println!("cleared sqlite store: {}", path);
         }
     } else {
         println!("store not found: {}", path);
