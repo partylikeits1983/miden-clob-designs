@@ -9,6 +9,7 @@ use.miden::tx
 # =================================================================================================
 
 const.PUBLIC_NOTE=1
+const.PRIVATE_NOTE=2
 const.EXECUTION_HINT_ALWAYS=1
 const.FACTOR=0x000186A0 # 1e5
 const.MAX_U32=0x0000000100000000
@@ -453,7 +454,7 @@ proc.execute_SWAPp
     push.EXECUTION_HINT_ALWAYS
     # => [execution_hint_always, P2ID_RECIPIENT]
 
-    push.PUBLIC_NOTE
+    push.PRIVATE_NOTE
     # => [public_note, execution_hint_always, P2ID_RECIPIENT]
 
     push.0 # @dev aux for p2id output note
@@ -522,7 +523,7 @@ proc.execute_SWAPp
         push.EXECUTION_HINT_ALWAYS
         # => [execution_hint_always, SWAPp_RECIPIENT]
 
-        push.PUBLIC_NOTE
+        push.PRIVATE_NOTE
         # => [public_note, execution_hint_always, SWAPp_RECIPIENT]
 
         push.0 # @dev empty aux
@@ -576,7 +577,7 @@ begin
     # => [NOTE_ARGS]
 
     # can provide amount B in as note args
-    mem_store.AMT_TOKENS_B_IN drop drop drop
+    drop drop drop mem_store.AMT_TOKENS_B_IN
     # => []
 
     push.5114721150025532103.1324187411136457873.11900545512113364072.1928473465238172547

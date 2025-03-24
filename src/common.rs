@@ -29,10 +29,13 @@ use miden_client::{
 
 use miden_lib::note::utils::build_swap_tag;
 
+use miden_client::transaction::TransactionRequestBuilder;
+use miden_objects::account::Account;
+use miden_objects::transaction::OutputNote;
 use miden_objects::{
     account::{AccountId, AuthSecretKey},
     assembly::{Assembler, DefaultSourceManager},
-    asset::Asset,
+    asset::{Asset, FungibleAsset},
     crypto::{dsa::rpo_falcon512::SecretKey, rand::FeltRng},
     Hasher, Word,
 };
@@ -169,6 +172,90 @@ pub async fn create_basic_faucet(
     Ok(account)
 }
 
+/// Creates [num_accounts] accounts, [num_faucets] faucets, and mints the given [balances].
+///
+/// - `balances[a][f]`: how many tokens faucet `f` should mint for account `a`.
+/// - Returns: a tuple of `(Vec<Account>, Vec<Account>)` i.e. (accounts, faucets).
+pub async fn setup_accounts_and_faucets(
+    client: &mut Client<RpoRandomCoin>,
+    num_accounts: usize,
+    num_faucets: usize,
+    balances: Vec<Vec<u64>>,
+) -> Result<(Vec<Account>, Vec<Account>), ClientError> {
+    // 1) Create the [num_accounts] basic accounts
+    let mut accounts = Vec::with_capacity(num_accounts);
+    for i in 0..num_accounts {
+        let account = create_basic_account(client).await?;
+        println!("Created Account #{i} => ID: {:?}", account.id());
+        accounts.push(account);
+    }
+
+    // 2) Create the [num_faucets] basic faucets
+    let mut faucets = Vec::with_capacity(num_faucets);
+    for j in 0..num_faucets {
+        let faucet = create_basic_faucet(client).await?;
+        println!("Created Faucet #{j} => ID: {:?}", faucet.id());
+        faucets.push(faucet);
+    }
+
+    // Make sure the client has synced and sees these new accounts/faucets
+    client.sync_state().await?;
+
+    // 3) Mint tokens for each account from each faucet using `balances`
+    //    Then consume each minted note, so the tokens truly reside in each account’s public vault
+    for (acct_index, account) in accounts.iter().enumerate() {
+        for (faucet_index, faucet) in faucets.iter().enumerate() {
+            let amount_to_mint = balances[acct_index][faucet_index];
+            if amount_to_mint == 0 {
+                continue;
+            }
+
+            println!(
+              "Minting {amount_to_mint} tokens from Faucet #{faucet_index} to Account #{acct_index}"
+          );
+
+            // Build a "mint fungible asset" transaction from this faucet
+            let fungible_asset = FungibleAsset::new(faucet.id(), amount_to_mint).unwrap();
+            let tx_req = TransactionRequestBuilder::mint_fungible_asset(
+                fungible_asset,
+                account.id(),
+                NoteType::Public,
+                client.rng(),
+            )
+            .unwrap()
+            .build();
+
+            // Submit the mint transaction
+            let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
+            client.submit_transaction(tx_exec.clone()).await?;
+
+            // Extract the minted note
+            let minted_note = if let OutputNote::Full(note) = tx_exec.created_notes().get_note(0) {
+                note.clone()
+            } else {
+                panic!("Expected OutputNote::Full, but got something else");
+            };
+
+            // Wait for the note to appear on the account side
+            sleep(Duration::from_secs(3)).await;
+            wait_for_notes(client, account, 1).await?;
+            client.sync_state().await?;
+
+            // Now consume the minted note from the account side
+            // so that the tokens reside in the account’s vault publicly
+            let consume_req = TransactionRequestBuilder::new()
+                .with_authenticated_input_notes([(minted_note.id(), None)])
+                .build();
+
+            let tx_exec = client.new_transaction(account.id(), consume_req).await?;
+            client.submit_transaction(tx_exec).await?;
+            client.sync_state().await?;
+        }
+    }
+
+    Ok((accounts, faucets))
+}
+
 // Helper to wait until an account has the expected number of consumable notes
 pub async fn wait_for_notes(
     client: &mut Client<RpoRandomCoin>,
@@ -248,6 +335,65 @@ pub fn create_partial_swap_note(
     let assembler = TransactionKernel::assembler().with_debug_mode(true);
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
     let note_type = NoteType::Public;
+
+    let requested_asset_word: Word = requested_asset.into();
+    let swapp_tag = build_swap_tag(note_type, &offered_asset, &requested_asset)?;
+    let p2id_tag = NoteTag::from_account_id(creator, NoteExecutionMode::Local)?;
+
+    let inputs = NoteInputs::new(vec![
+        requested_asset_word[0],
+        requested_asset_word[1],
+        requested_asset_word[2],
+        requested_asset_word[3],
+        swapp_tag.inner().into(),
+        p2id_tag.into(),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(swap_count),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        creator.prefix().into(),
+        creator.suffix().into(),
+    ])?;
+
+    let aux = Felt::new(0);
+
+    // build the outgoing note
+    let metadata = NoteMetadata::new(
+        last_consumer,
+        note_type,
+        swapp_tag,
+        NoteExecutionHint::always(),
+        aux,
+    )?;
+
+    let assets = NoteAssets::new(vec![offered_asset])?;
+    let recipient = NoteRecipient::new(swap_serial_num, note_script.clone(), inputs.clone());
+    let note = Note::new(assets.clone(), metadata, recipient.clone());
+
+    Ok(note)
+}
+
+pub fn create_partial_swap_private_note(
+    creator: AccountId,
+    last_consumer: AccountId,
+    offered_asset: Asset,
+    requested_asset: Asset,
+    swap_serial_num: [Felt; 4],
+    swap_count: u64,
+) -> Result<Note, NoteError> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let path: PathBuf = [manifest_dir, "masm", "notes", "SWAPP_PRIVATE.masm"]
+        .iter()
+        .collect();
+
+    let note_code = fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("Error reading {}: {}", path.display(), err));
+
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
+    let note_script = NoteScript::compile(note_code, assembler).unwrap();
+    let note_type = NoteType::Private;
 
     let requested_asset_word: Word = requested_asset.into();
     let swapp_tag = build_swap_tag(note_type, &offered_asset, &requested_asset)?;
@@ -429,36 +575,44 @@ pub fn create_option_contract_note<R: FeltRng>(
     Ok((note, p2id_note))
 }
 
-/// Computes the amount that will go out given `requested_asset_available`,
-/// and returns both the partial-fill amounts and the new remaining amounts.
+/// Computes how many of the offered asset go out given `requested_asset_filled`,
+/// then returns both the partial-fill amounts and the new remaining amounts.
 ///
 /// Formulas:
-///   amount_out = offered_asset_amount / requested_asset_amount * requested_asset_available
-///   new_offered_asset_amount = offered_asset_amount - amount_out
-///   new_requested_asset_amount = requested_asset_amount - requested_asset_available
+///   amount_out = (offered_swapp_asset_amount * requested_asset_filled)
+///                / requested_swapp_asset_amount
 ///
-/// Returns a tuple of: (amount_out, requested_asset_available, new_offered_asset_amount, new_requested_asset_amount).
+///   new_offered_asset_amount = offered_swapp_asset_amount - amount_out
+///
+///   new_requested_asset_amount = requested_swapp_asset_amount - requested_asset_filled
+///
+/// Returns a tuple of:
+/// (amount_out, requested_asset_filled, new_offered_asset_amount, new_requested_asset_amount)
+/// where:
+///   - `amount_out` is how many of the offered asset will be sent out,
+///   - `requested_asset_filled` is how many of the requested asset the filler provides,
+///   - `new_offered_asset_amount` is how many of the offered asset remain unfilled,
+///   - `new_requested_asset_amount` is how many of the requested asset remain unfilled.
 pub fn compute_partial_swapp(
-    offered_asset_amount: u64,
-    requested_asset_amount: u64,
-    requested_asset_available: u64,
-) -> (u64, u64, u64, u64) {
-    // amount of "A" that should be sent out on this partial fill
-    let amount_out = offered_asset_amount
-        .saturating_mul(requested_asset_available)
-        .saturating_div(requested_asset_amount);
+    offered_swapp_asset_amount: u64,
+    requested_swapp_asset_amount: u64,
+    requested_asset_filled: u64,
+) -> (u64, u64, u64) {
+    // amount of "offered" tokens (A) to send out
+    let amount_out_offered = offered_swapp_asset_amount
+        .saturating_mul(requested_asset_filled)
+        .saturating_div(requested_swapp_asset_amount);
 
-    // reduce the original offer and request by the partial fill amounts
-    let new_offered_asset_amount = offered_asset_amount.saturating_sub(amount_out);
+    // update leftover offered amount
+    let new_offered_asset_amount = offered_swapp_asset_amount.saturating_sub(amount_out_offered);
+
+    // update leftover requested amount
     let new_requested_asset_amount =
-        requested_asset_amount.saturating_sub(requested_asset_available);
+        requested_swapp_asset_amount.saturating_sub(requested_asset_filled);
 
-    // The partial fill for the B side is just `requested_asset_available`.
-    // So the second item in the returned tuple is the amount of B that is paid in,
-    // and the first item is how many A tokens go to the counterparty.
+    // Return partial fill info and updated amounts
     (
-        amount_out,
-        requested_asset_available,
+        amount_out_offered,
         new_offered_asset_amount,
         new_requested_asset_amount,
     )
