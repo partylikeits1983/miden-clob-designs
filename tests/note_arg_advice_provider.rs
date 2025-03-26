@@ -11,9 +11,9 @@ use miden_client::{
     ClientError, Felt, Word,
 };
 
-use miden_objects::vm::AdviceMap;
-
 use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
+use miden_objects::crypto::hash::rpo::Rpo256;
+use miden_objects::vm::AdviceMap;
 
 use miden_clob_designs::common::{
     initialize_client, reset_store_sqlite, setup_accounts_and_faucets, wait_for_notes,
@@ -91,17 +91,22 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
 
     let mut advice_map = AdviceMap::default();
-    let key: Word = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(0)];
-    let value: Word = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
-    advice_map.insert(key.into(), value.to_vec());
+    let key: Word = [Felt::new(3), Felt::new(3), Felt::new(3), Felt::new(3)];
+
+    let note_args_commitment = Rpo256::hash_elements(&key);
+
+    println!("commitment: {:?}", note_args_commitment);
+
+    advice_map.insert(note_args_commitment.into(), key.to_vec());
 
     wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
-    let secret = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
+
     let consume_custom_req = TransactionRequestBuilder::new()
-        .with_authenticated_input_notes([(custom_note.id(), Some(secret))])
+        .with_authenticated_input_notes([(custom_note.id(), Some(note_args_commitment.into()))])
         .extend_advice_map(advice_map)
         .build();
+
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
         .await

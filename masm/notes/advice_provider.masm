@@ -1,12 +1,20 @@
 use.miden::note
 use.miden::contracts::wallets::basic->wallet
+use.std::mem
 
-# => [HASH_PREIMAGE_SECRET]
+# => [NOTE_ARGS_COMMITMENT]
 begin
 
-    adv_pipe
-
     push.111 debug.stack drop
+
+    push.0
+
+    push.4
+
+    # adv_pipe
+    exec.mem::pipe_preimage_to_memory
+
+    push.222 debug.stack drop
 
     # => [HASH_PREIMAGE_SECRET]
 
