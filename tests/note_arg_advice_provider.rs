@@ -110,6 +110,9 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
 
     advice_map.insert(note_args_commitment.into(), note_args_value.to_vec());
 
+    let values_test = advice_map.get(&note_args_commitment);
+    println!("sanity test: {:?}", values_test);
+
     wait_for_notes(&mut client, &bob_account, 1).await?;
 
     let consume_custom_req = TransactionRequestBuilder::new()

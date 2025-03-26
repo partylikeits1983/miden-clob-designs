@@ -13,7 +13,9 @@ begin
 
     push.222 debug.stack drop
 
-    # adv_pipe
+    # => [8,0,NOTE_ARGS_COMMITMENT]
+
+    # Input: [num_words, write_ptr, COM, ...]
     exec.mem::pipe_preimage_to_memory
 
     push.333 debug.stack debug.mem drop
