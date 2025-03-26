@@ -91,16 +91,26 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
 
     let mut advice_map = AdviceMap::default();
-    let key: Word = [Felt::new(3), Felt::new(3), Felt::new(3), Felt::new(3)];
 
-    let note_args_commitment = Rpo256::hash_elements(&key);
+    let note_args_value = vec![
+        Felt::new(3),
+        Felt::new(3),
+        Felt::new(3),
+        Felt::new(3),
+        Felt::new(3),
+        Felt::new(3),
+        Felt::new(3),
+        Felt::new(3),
+    ];
+    // let note_args_commitment: Word = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(0)];
+
+    let note_args_commitment = Rpo256::hash_elements(&note_args_value);
 
     println!("commitment: {:?}", note_args_commitment);
 
-    advice_map.insert(note_args_commitment.into(), key.to_vec());
+    advice_map.insert(note_args_commitment.into(), note_args_value.to_vec());
 
     wait_for_notes(&mut client, &bob_account, 1).await?;
-    println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
 
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args_commitment.into()))])

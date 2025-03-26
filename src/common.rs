@@ -72,7 +72,7 @@ pub async fn initialize_client() -> Result<Client<RpoRandomCoin>, ClientError> {
     let authenticator = StoreAuthenticator::new_with_rng(arc_store.clone(), rng);
 
     // Instantiate client (toggle debug mode as needed)
-    let client = Client::new(rpc_api, rng, arc_store, Arc::new(authenticator), false);
+    let client = Client::new(rpc_api, rng, arc_store, Arc::new(authenticator), true);
 
     Ok(client)
 }
@@ -332,7 +332,7 @@ pub fn create_partial_swap_note(
     let note_code = fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("Error reading {}: {}", path.display(), err));
 
-    let assembler = TransactionKernel::assembler().with_debug_mode(false);
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
     let note_type = NoteType::Public;
 
@@ -391,7 +391,7 @@ pub fn create_partial_swap_private_note(
     let note_code = fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("Error reading {}: {}", path.display(), err));
 
-    let assembler = TransactionKernel::assembler().with_debug_mode(false);
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
     let note_type = NoteType::Private;
 
@@ -450,7 +450,7 @@ pub fn create_p2id_note(
     let note_code = fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("Error reading {}: {}", path.display(), err));
 
-    let assembler = TransactionKernel::assembler().with_debug_mode(false);
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
 
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
 
@@ -518,7 +518,7 @@ pub fn create_option_contract_note<R: FeltRng>(
 
     let note_code = fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("Error reading {}: {}", path.display(), err));
-    let assembler = TransactionKernel::assembler().with_debug_mode(false);
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
     let note_script = NoteScript::compile(note_code, assembler).unwrap();
     let note_type = NoteType::Public;
 

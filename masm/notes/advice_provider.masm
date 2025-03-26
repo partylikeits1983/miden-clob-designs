@@ -9,12 +9,14 @@ begin
 
     push.0
 
-    push.4
+    push.8
+
+    push.222 debug.stack drop
 
     # adv_pipe
     exec.mem::pipe_preimage_to_memory
 
-    push.222 debug.stack drop
+    push.333 debug.stack debug.mem drop
 
     # => [HASH_PREIMAGE_SECRET]
 
