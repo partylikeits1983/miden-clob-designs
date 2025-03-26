@@ -3,6 +3,7 @@ use.miden::contracts::wallets::basic->wallet
 
 # => [HASH_PREIMAGE_SECRET]
 begin
+    push.111 debug.stack drop
 
     # Hashing the secret number
     hperm
@@ -19,6 +20,8 @@ begin
     # Pad stack and load note inputs from memory
     padw push.0 mem_loadw
     # => [INPUTS, DIGEST]
+
+    push.222 debug.stack drop
 
     # Assert that the note input matches the digest
     # Will fail if the two hashes do not match

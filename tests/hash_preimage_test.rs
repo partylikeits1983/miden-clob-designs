@@ -14,11 +14,15 @@ use miden_client::{
 use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, initialize_client, wait_for_notes,
+    create_basic_account, create_basic_faucet, initialize_client, reset_store_sqlite,
+    wait_for_notes,
 };
 
 #[tokio::test]
 async fn hash_preimage_note_test() -> Result<(), ClientError> {
+    // Reset the store and initialize the client.
+    reset_store_sqlite().await;
+
     let mut client = initialize_client().await?;
     println!(
         "Client initialized successfully. Latest block: {}",
@@ -90,7 +94,7 @@ async fn hash_preimage_note_test() -> Result<(), ClientError> {
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
     let note_inputs = NoteInputs::new(digest.to_vec()).unwrap();
-    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs);
+    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
     let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
         alice_account.id(),
@@ -117,6 +121,8 @@ async fn hash_preimage_note_test() -> Result<(), ClientError> {
     );
     let _ = client.submit_transaction(tx_result).await;
     client.sync_state().await?;
+
+    println!("note inputs: {:?}", note_inputs.values());
 
     // -------------------------------------------------------------------------
     // STEP 4: Consume the Custom Note

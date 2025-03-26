@@ -2,24 +2,22 @@ use.miden::note
 use.miden::contracts::wallets::basic->wallet
 use.std::mem
 
+# inputs: []
+# outpus: [WORD_1]
+proc.get_vals_from_advice_map
+    adv.push_mapval
+
+    adv_pipe
+
+    dropw dropw drop
+
+    mem_loadw.0
+end
+
 # => [NOTE_ARGS_COMMITMENT]
 begin
-
-    push.111 debug.stack drop
-
-    push.0
-
-    push.8
-
-    push.222 debug.stack drop
-
-    # => [8,0,NOTE_ARGS_COMMITMENT]
-
-    # Input: [num_words, write_ptr, COM, ...]
-    exec.mem::pipe_preimage_to_memory
-
-    push.333 debug.stack debug.mem drop
-
+    exec.get_vals_from_advice_map
+    # => [WORD_1]
     # => [HASH_PREIMAGE_SECRET]
 
     # Hashing the secret number

@@ -1,8 +1,7 @@
 use std::{fs, path::Path};
-use tokio::time::{sleep, Duration};
 
 use miden_client::{
-    asset::{Asset, FungibleAsset},
+    asset::FungibleAsset,
     note::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
         NoteRecipient, NoteScript, NoteTag, NoteType,
@@ -57,7 +56,7 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
     let note_inputs = NoteInputs::new(digest.to_vec()).unwrap();
-    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs);
+    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
     let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
         alice_account.id(),
@@ -86,6 +85,8 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     let _ = client.submit_transaction(tx_result).await;
     client.sync_state().await?;
 
+    println!("note inputs: {:?}", note_inputs.values());
+
     // -------------------------------------------------------------------------
     // STEP 4: Consume the Custom Note
     // -------------------------------------------------------------------------
@@ -93,19 +94,17 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     let mut advice_map = AdviceMap::default();
 
     let note_args_value = vec![
+        Felt::new(1),
+        Felt::new(2),
         Felt::new(3),
-        Felt::new(3),
-        Felt::new(3),
-        Felt::new(3),
-        Felt::new(3),
-        Felt::new(3),
-        Felt::new(3),
-        Felt::new(3),
+        Felt::new(4),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
     ];
-    // let note_args_commitment: Word = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(0)];
 
     let note_args_commitment = Rpo256::hash_elements(&note_args_value);
-
     println!("commitment: {:?}", note_args_commitment);
 
     advice_map.insert(note_args_commitment.into(), note_args_value.to_vec());

@@ -1,0 +1,5 @@
+# PARTIALLY FILLABALE SWAP NOTE WITH PRICE VERIFIED BY FALCON512 SIGNATURE
+
+# This is an implementation of the SWAP NOTE where price (ask vs offer) is
+# based upon the signature of the creator of the swap note.
+# this allows for users to update the price of the SWAPP note in near real time
