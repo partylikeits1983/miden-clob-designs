@@ -1,18 +1,20 @@
-use std::time::Instant;
+use std::{env::set_current_dir, time::Instant};
 
 use miden_client::{
     asset::FungibleAsset,
     note::NoteType,
     transaction::{OutputNote, TransactionRequestBuilder},
-    ClientError, Felt,
+    ClientError, Felt, Word,
 };
 
-use miden_crypto::rand::FeltRng;
+use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
+use miden_objects::crypto::hash::rpo::Rpo256;
+use miden_objects::vm::AdviceMap;
 
 use miden_clob_designs::common::{
     compute_partial_swapp, create_p2id_note, create_partial_swap_note,
-    create_partial_swap_private_note, get_p2id_serial_num, get_swapp_note, initialize_client,
-    reset_store_sqlite, setup_accounts_and_faucets,
+    create_partial_swap_note_cancellable, create_partial_swap_private_note, get_p2id_serial_num,
+    get_swapp_note, initialize_client, reset_store_sqlite, setup_accounts_and_faucets,
 };
 
 #[tokio::test]
@@ -781,6 +783,189 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
         new_offered_asset_amount_1, new_requested_asset_amount_1
     );
     println!("Done with partial swap ephemeral chain test.");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
+    // reset store.sqlite file
+    reset_store_sqlite().await;
+
+    // create & sync the client
+    let mut client = initialize_client().await?;
+    println!(
+        "Client initialized successfully. Latest block: {}",
+        client.sync_state().await.unwrap().block_num
+    );
+
+    let balances = vec![
+        vec![100, 0], // For account[0] => Alice
+        vec![0, 100], // For account[1] => Bob
+    ];
+    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 2, 2, balances).await?;
+
+    // rename for clarity
+    let alice_account = accounts[0].clone();
+    let bob_account = accounts[1].clone();
+    let faucet_a = faucets[0].clone();
+    let faucet_b = faucets[1].clone();
+
+    // -------------------------------------------------------------------------
+    // STEP 1: Create SWAPP note
+    // -------------------------------------------------------------------------
+    println!("\n[STEP 3] Create SWAPP note");
+
+    // offered asset amount
+    let amount_a = 50;
+    let asset_a = FungibleAsset::new(faucet_a.id(), amount_a).unwrap();
+
+    // requested asset amount
+    let amount_b = 50;
+    let asset_b = FungibleAsset::new(faucet_b.id(), amount_b).unwrap();
+
+    let mut swap_secret = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
+    swap_secret.splice(0..0, Word::default().iter().cloned());
+    let swap_secret_hash = Hasher::hash_elements(&swap_secret);
+
+    let swap_serial_num = client.rng().draw_word();
+    let swap_count = 0;
+
+    let swapp_note = create_partial_swap_note_cancellable(
+        alice_account.id(),
+        alice_account.id(),
+        asset_a.into(),
+        asset_b.into(),
+        swap_secret_hash.into(),
+        swap_serial_num,
+        swap_count,
+    )
+    .unwrap();
+
+    let swapp_tag = swapp_note.metadata().tag();
+
+    let note_req = TransactionRequestBuilder::new()
+        .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
+        .unwrap()
+        .build();
+    let tx_result = client
+        .new_transaction(alice_account.id(), note_req)
+        .await
+        .unwrap();
+
+    println!(
+        "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
+        tx_result.executed_transaction().id()
+    );
+
+    let _ = client.submit_transaction(tx_result).await;
+    client.sync_state().await?;
+
+    let swapp_note_id = swapp_note.id();
+
+    // Time from after SWAPP creation
+    let start_time = Instant::now();
+
+    let _ = get_swapp_note(&mut client, swapp_tag, swapp_note_id).await;
+
+    // -------------------------------------------------------------------------
+    // STEP 2: Partial Consume SWAPP note
+    // -------------------------------------------------------------------------
+    let fill_amount_bob = 25;
+    let (_amount_a_1, new_amount_a, new_amount_b) =
+        compute_partial_swapp(amount_a, amount_b, fill_amount_bob);
+
+    let swap_serial_num_1 = [
+        swap_serial_num[0],
+        swap_serial_num[1],
+        swap_serial_num[2],
+        Felt::new(swap_serial_num[3].as_int() + 1),
+    ];
+    let swap_count_1 = swap_count + 1;
+
+    // leftover portion of Alice’s original order
+    let swapp_note_1 = create_partial_swap_note_cancellable(
+        alice_account.id(),
+        bob_account.id(),
+        FungibleAsset::new(faucet_a.id(), new_amount_a)
+            .unwrap()
+            .into(),
+        FungibleAsset::new(faucet_b.id(), new_amount_b)
+            .unwrap()
+            .into(),
+            swap_secret_hash.into(),
+        swap_serial_num_1,
+        swap_count_1,
+    )
+    .unwrap();
+
+    // P2ID note for Bob’s partial fill going to Alice
+    let p2id_note_asset_1 = FungibleAsset::new(faucet_b.id(), fill_amount_bob).unwrap();
+    let p2id_serial_num_1 = get_p2id_serial_num(swap_serial_num, swap_count_1);
+
+    let p2id_note = create_p2id_note(
+        bob_account.id(),
+        alice_account.id(),
+        vec![p2id_note_asset_1.into()],
+        NoteType::Public,
+        Felt::new(0),
+        p2id_serial_num_1,
+    )
+    .unwrap();
+
+    client.sync_state().await?;
+
+    // pass in amount to fill via note args
+    let secret: Word = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
+
+    let consume_amount_note_args = [
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(0),
+        Felt::new(fill_amount_bob),
+    ];
+
+    let mut advice_map = AdviceMap::default();
+
+    let note_args_value = vec![
+        secret[0],
+        secret[1],
+        secret[2],
+        secret[3],
+        consume_amount_note_args[0],
+        consume_amount_note_args[1],
+        consume_amount_note_args[2],
+        consume_amount_note_args[3],
+    ];
+    println!("note_args: {:?}", note_args_value);
+
+    let note_args_commitment = Rpo256::hash_elements(&note_args_value);
+
+    advice_map.insert(note_args_commitment.into(), note_args_value.to_vec());
+
+    let consume_custom_req = TransactionRequestBuilder::new()
+        .with_authenticated_input_notes([(swapp_note.id(), Some(note_args_commitment.into()))])
+        .with_expected_output_notes(vec![p2id_note, swapp_note_1])
+        .extend_advice_map(advice_map)
+        .build();
+
+    let tx_result = client
+        .new_transaction(bob_account.id(), consume_custom_req)
+        .await
+        .unwrap();
+
+    println!(
+        "Consumed Note Tx on MidenScan: https://testnet.midenscan.com/tx/{:?}",
+        tx_result.executed_transaction().id()
+    );
+    println!("account delta: {:?}", tx_result.account_delta().vault());
+
+    let _ = client.submit_transaction(tx_result).await;
+
+    // Stop timing
+    let duration = start_time.elapsed();
+    println!("SWAPP note partially filled");
+    println!("Time from SWAPP creation to partial fill: {:?}", duration);
 
     Ok(())
 }
