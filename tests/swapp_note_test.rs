@@ -7,6 +7,9 @@ use miden_client::{
     ClientError, Felt, Word,
 };
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 use miden_objects::crypto::hash::rpo::Rpo256;
 use miden_objects::vm::AdviceMap;
@@ -812,7 +815,7 @@ async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
     let faucet_b = faucets[1].clone();
 
     // -------------------------------------------------------------------------
-    // STEP 1: Create SWAPP note
+    // STEP 1: Create cancellable SWAPP note
     // -------------------------------------------------------------------------
     println!("\n[STEP 3] Create SWAPP note");
 
@@ -916,6 +919,8 @@ async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
     client.sync_state().await?;
 
     // pass in amount to fill via note args
+    // simulate that BOB has to get this from a data base
+    // time how long it would take to retrive this secret from a database
     let secret: Word = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
 
     let consume_amount_note_args = [
@@ -968,6 +973,50 @@ async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
     println!("Time from SWAPP creation to partial fill: {:?}", duration);
 
     Ok(())
+}
+
+#[tokio::test]
+async fn secret_drop_test() {
+    // A bit of a redundant test, but it proves a point that cancellation of an order
+    // that uses a hash preimage secret, is as fast as dropping a value from a
+    // database.
+    // Shared in-memory "database" using a HashMap wrapped in a Mutex.
+    let secret_db: Arc<Mutex<HashMap<&str, Word>>> = Arc::new(Mutex::new(HashMap::new()));
+    let key = "swap_secret";
+
+    // 1. Push the secret into the "database".
+    let secret: Word = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
+    {
+        let mut db = secret_db.lock().unwrap();
+        db.insert(key, secret);
+    }
+    println!("Secret inserted into the database.");
+
+    // 2. Alice drops (removes) the secret and we time how long it takes.
+    let alice_db = secret_db.clone();
+    let start_time = Instant::now();
+    {
+        let mut db = alice_db.lock().unwrap();
+        db.remove(key);
+    }
+    let drop_duration = start_time.elapsed();
+    println!("Alice dropped the secret in: {:?}", drop_duration);
+
+    // 3. Bob attempts to retrieve the secret.
+    let bob_db = secret_db.clone();
+    let retrieved_secret = {
+        let db = bob_db.lock().unwrap();
+        db.get(key).cloned() // Attempt to get the secret.
+    };
+
+    match retrieved_secret {
+        Some(secret) => {
+            println!("Bob retrieved the secret: {:?}", secret);
+        }
+        None => {
+            println!("Bob could not retrieve the secret; order is cancelled.");
+        }
+    }
 }
 
 #[tokio::test]
