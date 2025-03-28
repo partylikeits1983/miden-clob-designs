@@ -43,11 +43,11 @@ const.SWAPP_CREATOR_SUFFIX_INPUT = 0x000D
 # RESERVED INPUT MEMORY ADDRESSES 0 to 40
 
 # Memory Addresses for Price Calculation Procedure (41 to 60)
-const.AMT_TOKENS_A = 0x0029
-const.AMT_TOKENS_B = 0x0016
-const.AMT_TOKENS_B_IN = 0x002B
-const.AMT_TOKENS_A_OUT = 0x002C
-const.RATIO = 0x002D
+const.AMT_TOKENS_A = 0x0028
+const.AMT_TOKENS_B = 0x0029
+const.AMT_TOKENS_B_IN = 0x002A
+const.AMT_TOKENS_A_OUT= 0x002B
+const.RATIO = 0x002C
 
 # TokenId Memory Addresses (60 to 70)
 const.TOKEN_A_ID_PREFIX = 0x002D

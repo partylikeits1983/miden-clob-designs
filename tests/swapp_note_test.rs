@@ -893,7 +893,7 @@ async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
         FungibleAsset::new(faucet_b.id(), new_amount_b)
             .unwrap()
             .into(),
-            swap_secret_hash.into(),
+        swap_secret_hash.into(),
         swap_serial_num_1,
         swap_count_1,
     )

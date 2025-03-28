@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{any::Any, fs, path::PathBuf, sync::Arc};
 
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
@@ -237,7 +237,6 @@ pub async fn setup_accounts_and_faucets(
             };
 
             // Wait for the note to appear on the account side
-            sleep(Duration::from_secs(3)).await;
             wait_for_notes(client, account, 1).await?;
             client.sync_state().await?;
 
@@ -496,6 +495,17 @@ pub fn create_partial_swap_note_cancellable(
     let assets = NoteAssets::new(vec![offered_asset])?;
     let recipient = NoteRecipient::new(swap_serial_num, note_script.clone(), inputs.clone());
     let note = Note::new(assets.clone(), metadata, recipient.clone());
+
+    println!(
+        "inputlen: {:?}, NoteInputs: {:?}",
+        inputs.num_values(),
+        inputs.values()
+    );
+    println!("tag: {:?}", note.metadata().tag());
+    println!("aux: {:?}", note.metadata().aux());
+    println!("note type: {:?}", note.metadata().note_type());
+    println!("hint: {:?}", note.metadata().execution_hint());
+    println!("recipient: {:?}", note.recipient().digest());
 
     Ok(note)
 }
