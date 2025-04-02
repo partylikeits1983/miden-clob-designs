@@ -1,98 +1,28 @@
-use std::{any::Any, fs, path::PathBuf, sync::Arc};
-
-use rand::Rng;
-use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
-
-use tokio::time::{sleep, Duration};
-
 use miden_assembly::{
     ast::{Module, ModuleKind},
-    LibraryPath,
+    Assembler, DefaultSourceManager, LibraryPath,
 };
+use rand::{rngs::StdRng, RngCore};
+use std::{fs, path::PathBuf, sync::Arc};
+use tokio::time::{sleep, Duration};
 
 use miden_client::{
     account::{
         component::{BasicFungibleFaucet, BasicWallet, RpoFalcon512},
-        AccountBuilder, AccountStorageMode, AccountType,
+        Account, AccountBuilder, AccountId, AccountStorageMode, AccountType,
     },
-    asset::TokenSymbol,
-    crypto::RpoRandomCoin,
+    asset::{Asset, FungibleAsset, TokenSymbol},
+    auth::AuthSecretKey,
+    crypto::{FeltRng, SecretKey},
+    keystore::FilesystemKeyStore,
     note::{
-        Note, NoteAssets, NoteError, NoteExecutionHint, NoteExecutionMode, NoteId, NoteInputs,
+        build_swap_tag, Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteId, NoteInputs,
         NoteMetadata, NoteRecipient, NoteScript, NoteTag, NoteType,
     },
-    rpc::{Endpoint, TonicRpcClient},
-    store::{sqlite_store::SqliteStore, StoreAuthenticator},
-    transaction::TransactionKernel,
-    Client, ClientError, Felt,
+    transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
+    Client, ClientError, Felt, Word,
 };
-
-use miden_lib::note::utils::build_swap_tag;
-
-use miden_client::transaction::TransactionRequestBuilder;
-use miden_objects::account::Account;
-use miden_objects::transaction::OutputNote;
-use miden_objects::{
-    account::{AccountId, AuthSecretKey},
-    assembly::{Assembler, DefaultSourceManager},
-    asset::{Asset, FungibleAsset},
-    crypto::{dsa::rpo_falcon512::SecretKey, rand::FeltRng},
-    Hasher, Word,
-};
-
-pub async fn initialize_client() -> Result<Client<RpoRandomCoin>, ClientError> {
-    // RPC endpoint and timeout
-    let endpoint = Endpoint::new(
-        "https".to_string(),
-        "rpc.testnet.miden.io".to_string(),
-        Some(443),
-    );
-    let timeout_ms = 10_000;
-
-    // Build RPC client
-    let rpc_api = Box::new(TonicRpcClient::new(endpoint, timeout_ms));
-
-    // Seed RNG
-    let mut seed_rng = rand::thread_rng();
-    let coin_seed: [u64; 4] = seed_rng.gen();
-
-    // Create random coin instance
-    let rng = RpoRandomCoin::new(coin_seed.map(Felt::new));
-
-    // SQLite path
-    let store_path = "store.sqlite3";
-
-    // Initialize SQLite store
-    let store = SqliteStore::new(store_path.into())
-        .await
-        .map_err(ClientError::StoreError)?;
-    let arc_store = Arc::new(store);
-
-    // Create authenticator referencing the store and RNG
-    let authenticator = StoreAuthenticator::new_with_rng(arc_store.clone(), rng);
-
-    // Instantiate client (toggle debug mode as needed)
-    let client = Client::new(rpc_api, rng, arc_store, Arc::new(authenticator), true);
-
-    Ok(client)
-}
-
-pub fn get_new_pk_and_authenticator() -> (Word, AuthSecretKey) {
-    // Create a deterministic RNG with zeroed seed
-    let seed = [0_u8; 32];
-    let mut rng = ChaCha20Rng::from_seed(seed);
-
-    // Generate Falcon-512 secret key
-    let sec_key = SecretKey::with_rng(&mut rng);
-
-    // Convert public key to `Word` (4xFelt)
-    let pub_key: Word = sec_key.public_key().into();
-
-    // Wrap secret key in `AuthSecretKey`
-    let auth_secret_key = AuthSecretKey::RpoFalcon512(sec_key);
-
-    (pub_key, auth_secret_key)
-}
+use miden_objects::{Hasher, NoteError};
 
 /// Creates a library from the provided source code and library path.
 ///
@@ -118,12 +48,13 @@ pub fn create_library(
     Ok(library)
 }
 
-// Helper to create a basic account
 pub async fn create_basic_account(
-    client: &mut Client<RpoRandomCoin>,
+    client: &mut Client,
+    keystore: FilesystemKeyStore<StdRng>,
 ) -> Result<miden_client::account::Account, ClientError> {
-    let mut init_seed = [0u8; 32];
+    let mut init_seed = [0_u8; 32];
     client.rng().fill_bytes(&mut init_seed);
+
     let key_pair = SecretKey::with_rng(client.rng());
     let anchor_block = client.get_latest_epoch_block().await.unwrap();
     let builder = AccountBuilder::new(init_seed)
@@ -133,19 +64,17 @@ pub async fn create_basic_account(
         .with_component(RpoFalcon512::new(key_pair.public_key()))
         .with_component(BasicWallet);
     let (account, seed) = builder.build().unwrap();
-    client
-        .add_account(
-            &account,
-            Some(seed),
-            &AuthSecretKey::RpoFalcon512(key_pair),
-            false,
-        )
-        .await?;
+    client.add_account(&account, Some(seed), false).await?;
+    keystore
+        .add_key(&AuthSecretKey::RpoFalcon512(key_pair))
+        .unwrap();
+
     Ok(account)
 }
 
 pub async fn create_basic_faucet(
-    client: &mut Client<RpoRandomCoin>,
+    client: &mut Client,
+    keystore: FilesystemKeyStore<StdRng>,
 ) -> Result<miden_client::account::Account, ClientError> {
     let mut init_seed = [0u8; 32];
     client.rng().fill_bytes(&mut init_seed);
@@ -161,14 +90,10 @@ pub async fn create_basic_faucet(
         .with_component(RpoFalcon512::new(key_pair.public_key()))
         .with_component(BasicFungibleFaucet::new(symbol, decimals, max_supply).unwrap());
     let (account, seed) = builder.build().unwrap();
-    client
-        .add_account(
-            &account,
-            Some(seed),
-            &AuthSecretKey::RpoFalcon512(key_pair),
-            false,
-        )
-        .await?;
+    client.add_account(&account, Some(seed), false).await?;
+    keystore
+        .add_key(&AuthSecretKey::RpoFalcon512(key_pair))
+        .unwrap();
     Ok(account)
 }
 
@@ -177,7 +102,8 @@ pub async fn create_basic_faucet(
 /// - `balances[a][f]`: how many tokens faucet `f` should mint for account `a`.
 /// - Returns: a tuple of `(Vec<Account>, Vec<Account>)` i.e. (accounts, faucets).
 pub async fn setup_accounts_and_faucets(
-    client: &mut Client<RpoRandomCoin>,
+    client: &mut Client,
+    keystore: FilesystemKeyStore<StdRng>,
     num_accounts: usize,
     num_faucets: usize,
     balances: Vec<Vec<u64>>,
@@ -185,7 +111,7 @@ pub async fn setup_accounts_and_faucets(
     // 1) Create the [num_accounts] basic accounts
     let mut accounts = Vec::with_capacity(num_accounts);
     for i in 0..num_accounts {
-        let account = create_basic_account(client).await?;
+        let account = create_basic_account(client, keystore.clone()).await?;
         println!("Created Account #{i} => ID: {:?}", account.id());
         accounts.push(account);
     }
@@ -193,7 +119,7 @@ pub async fn setup_accounts_and_faucets(
     // 2) Create the [num_faucets] basic faucets
     let mut faucets = Vec::with_capacity(num_faucets);
     for j in 0..num_faucets {
-        let faucet = create_basic_faucet(client).await?;
+        let faucet = create_basic_faucet(client, keystore.clone()).await?;
         println!("Created Faucet #{j} => ID: {:?}", faucet.id());
         faucets.push(faucet);
     }
@@ -223,7 +149,8 @@ pub async fn setup_accounts_and_faucets(
                 client.rng(),
             )
             .unwrap()
-            .build();
+            .build()
+            .unwrap();
 
             // Submit the mint transaction
             let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
@@ -244,7 +171,8 @@ pub async fn setup_accounts_and_faucets(
             // so that the tokens reside in the account’s vault publicly
             let consume_req = TransactionRequestBuilder::new()
                 .with_authenticated_input_notes([(minted_note.id(), None)])
-                .build();
+                .build()
+                .unwrap();
 
             let tx_exec = client.new_transaction(account.id(), consume_req).await?;
             client.submit_transaction(tx_exec).await?;
@@ -255,9 +183,8 @@ pub async fn setup_accounts_and_faucets(
     Ok((accounts, faucets))
 }
 
-// Helper to wait until an account has the expected number of consumable notes
 pub async fn wait_for_notes(
-    client: &mut Client<RpoRandomCoin>,
+    client: &mut Client,
     account_id: &miden_client::account::Account,
     expected: usize,
 ) -> Result<(), ClientError> {
@@ -278,7 +205,7 @@ pub async fn wait_for_notes(
 }
 
 pub async fn get_swapp_note(
-    client: &mut Client<RpoRandomCoin>,
+    client: &mut Client,
     tag: NoteTag,
     swapp_note_id: NoteId,
 ) -> Result<(), ClientError> {

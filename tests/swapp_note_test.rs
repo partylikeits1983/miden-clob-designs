@@ -2,7 +2,10 @@ use std::{env::set_current_dir, time::Instant};
 
 use miden_client::{
     asset::FungibleAsset,
+    builder::ClientBuilder,
+    keystore::FilesystemKeyStore,
     note::NoteType,
+    rpc::{Endpoint, TonicRpcClient},
     transaction::{OutputNote, TransactionRequestBuilder},
     ClientError, Felt, Word,
 };
@@ -17,26 +20,43 @@ use miden_objects::vm::AdviceMap;
 use miden_clob_designs::common::{
     compute_partial_swapp, create_p2id_note, create_partial_swap_note,
     create_partial_swap_note_cancellable, create_partial_swap_private_note, get_p2id_serial_num,
-    get_swapp_note, initialize_client, reset_store_sqlite, setup_accounts_and_faucets,
+    get_swapp_note, reset_store_sqlite, setup_accounts_and_faucets,
 };
 
 #[tokio::test]
 async fn swap_note_partial_consume_public_test() -> Result<(), ClientError> {
-    // reset store.sqlite file
+    // Reset the store and initialize the client.
     reset_store_sqlite().await;
 
-    // create & sync the client
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let _endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let endpoint = Endpoint::testnet();
+
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     let balances = vec![
         vec![100, 0], // For account[0] => Alice
         vec![0, 100], // For account[1] => Bob
     ];
-    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 2, 2, balances).await?;
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 2, 2, balances).await?;
 
     // rename for clarity
     let alice_account = accounts[0].clone();
@@ -74,8 +94,8 @@ async fn swap_note_partial_consume_public_test() -> Result<(), ClientError> {
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -153,7 +173,8 @@ async fn swap_note_partial_consume_public_test() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(swapp_note.id(), Some(consume_amount_note_args))])
         .with_expected_output_notes(vec![p2id_note, swapp_note_1])
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
@@ -178,21 +199,35 @@ async fn swap_note_partial_consume_public_test() -> Result<(), ClientError> {
 
 #[tokio::test]
 async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
-    // reset store.sqlite file
     reset_store_sqlite().await;
 
-    // create & sync the client
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     let balances = vec![
         vec![100, 0], // For account[0] => Alice
         vec![0, 100], // For account[1] => Bob
     ];
-    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 2, 2, balances).await?;
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 2, 2, balances).await?;
 
     // rename for clarity
     let alice_account = accounts[0].clone();
@@ -230,8 +265,8 @@ async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -309,7 +344,8 @@ async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(swapp_note.id(), Some(consume_amount_note_args))])
         .with_expected_output_notes(vec![p2id_note, swapp_note_1])
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
@@ -334,15 +370,28 @@ async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
 
 #[tokio::test]
 async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientError> {
-    // Reset store
     reset_store_sqlite().await;
 
-    // Initialize & sync client
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await?.block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     let balances = vec![
         vec![100, 0], // Alice
@@ -351,7 +400,8 @@ async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientEr
     ];
 
     // This returns `(Vec<Account>, Vec<Account>)` => (accounts, faucets)
-    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 3, 2, balances).await?;
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 3, 2, balances).await?;
 
     let alice_account = accounts[0].clone();
     let bob_account = accounts[1].clone();
@@ -386,8 +436,8 @@ async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientEr
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -461,7 +511,8 @@ async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientEr
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_unauthenticated_input_notes([(swapp_note, Some(consume_amount_note_args))])
         .with_expected_output_notes(vec![p2id_note_1.clone(), swapp_note_1.clone()])
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
@@ -539,7 +590,8 @@ async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientEr
     let consume_custom_req_charlie = TransactionRequestBuilder::new()
         .with_unauthenticated_input_notes([(swapp_note_1, Some(consume_amount_note_args_charlie))])
         .with_expected_output_notes(vec![p2id_note_2.clone(), swapp_note_2.clone()])
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(charlie_account.id(), consume_custom_req_charlie)
@@ -568,15 +620,28 @@ async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientEr
 
 #[tokio::test]
 async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientError> {
-    // Reset store
     reset_store_sqlite().await;
 
-    // Initialize & sync client
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await?.block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     let balances = vec![
         vec![100, 0], // Alice
@@ -584,7 +649,8 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
         vec![0, 100], // Charlie
     ];
 
-    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 3, 2, balances).await?;
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 3, 2, balances).await?;
 
     let alice_account = accounts[0].clone();
     let bob_account = accounts[1].clone();
@@ -619,8 +685,8 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -687,7 +753,8 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_unauthenticated_input_notes([(swapp_note, Some(consume_amount_note_args))])
         .with_expected_output_notes(vec![p2id_note_1.clone(), swapp_note_1.clone()])
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
@@ -763,7 +830,8 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
     let consume_custom_req_charlie = TransactionRequestBuilder::new()
         .with_unauthenticated_input_notes([(swapp_note_1, Some(consume_amount_note_args_charlie))])
         .with_expected_output_notes(vec![p2id_note_2.clone(), swapp_note_2.clone()])
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(charlie_account.id(), consume_custom_req_charlie)
@@ -792,21 +860,35 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
 
 #[tokio::test]
 async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
-    // reset store.sqlite file
     reset_store_sqlite().await;
 
-    // create & sync the client
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     let balances = vec![
         vec![100, 0], // For account[0] => Alice
         vec![0, 100], // For account[1] => Bob
     ];
-    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 2, 2, balances).await?;
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 2, 2, balances).await?;
 
     // rename for clarity
     let alice_account = accounts[0].clone();
@@ -849,8 +931,8 @@ async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -952,7 +1034,8 @@ async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
         .with_authenticated_input_notes([(swapp_note.id(), Some(note_args_commitment.into()))])
         .with_expected_output_notes(vec![p2id_note, swapp_note_1])
         .extend_advice_map(advice_map)
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)

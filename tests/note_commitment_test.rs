@@ -1,38 +1,54 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 
 use miden_client::{
+    builder::ClientBuilder,
+    keystore::FilesystemKeyStore,
     note::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
         NoteRecipient, NoteScript, NoteTag, NoteType,
     },
+    rpc::{Endpoint, TonicRpcClient},
     transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt, Word,
 };
 
 use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 
-use miden_clob_designs::common::{
-    create_basic_account, initialize_client, reset_store_sqlite, wait_for_notes,
-};
+use miden_clob_designs::common::{create_basic_account, reset_store_sqlite, wait_for_notes};
 
 #[tokio::test]
 async fn note_input_commitment_test() -> Result<(), ClientError> {
-    // reset store.sqlite file
+    // Reset the store and initialize the client.
     reset_store_sqlite().await;
 
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     // -------------------------------------------------------------------------
     // STEP 1: Create account
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client).await?;
+    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id().to_hex());
-    let bob_account = create_basic_account(&mut client).await?;
+    let bob_account = create_basic_account(&mut client, keystore).await?;
     println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
     // -------------------------------------------------------------------------
@@ -61,12 +77,12 @@ async fn note_input_commitment_test() -> Result<(), ClientError> {
     )?;
     let vault = NoteAssets::new(vec![])?;
     let custom_note = Note::new(vault, metadata, recipient);
-    println!("note hash: {:?}", custom_note.hash());
+    println!("note hash: {:?}", custom_note.commitment());
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(custom_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -117,7 +133,8 @@ async fn note_input_commitment_test() -> Result<(), ClientError> {
 
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), None)])
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
         .await

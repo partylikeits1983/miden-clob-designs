@@ -1,11 +1,15 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 
-use rand::Rng;
+use rand::{Rng, RngCore};
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 use miden_client::{
     account::{AccountStorageMode, AccountType},
+    auth::AuthSecretKey,
+    builder::ClientBuilder,
+    keystore::FilesystemKeyStore,
+    rpc::{Endpoint, TonicRpcClient},
     transaction::{TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt,
 };
@@ -16,17 +20,29 @@ use miden_objects::{
     transaction::TransactionScript,
 };
 
-use miden_clob_designs::common::{create_library, get_new_pk_and_authenticator, initialize_client};
+use miden_clob_designs::common::{create_library, reset_store_sqlite};
 
 #[tokio::test]
 async fn mapping_example_test() -> Result<(), ClientError> {
-    // -------------------------------------------------------------------------
-    // Initialize the Miden client
-    // -------------------------------------------------------------------------
-    let mut client = initialize_client().await?;
-    println!("Client initialized successfully.");
+    // Reset the store and initialize the client.
+    reset_store_sqlite().await;
 
-    // Fetch and display the latest synchronized block number from the node.
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
+    );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
     let sync_summary = client.sync_state().await.unwrap();
     println!("Latest block: {}", sync_summary.block_num);
 
@@ -60,7 +76,8 @@ async fn mapping_example_test() -> Result<(), ClientError> {
     .with_supports_all_types();
 
     // Init seed for the counter contract
-    let init_seed = ChaCha20Rng::from_entropy().gen();
+    let mut init_seed = [0_u8; 32];
+    client.rng().fill_bytes(&mut init_seed);
 
     // Anchor block of the account
     let anchor_block = client.get_latest_epoch_block().await.unwrap();
@@ -74,15 +91,8 @@ async fn mapping_example_test() -> Result<(), ClientError> {
         .build()
         .unwrap();
 
-    let (_, auth_secret_key) = get_new_pk_and_authenticator();
-
     client
-        .add_account(
-            &mapping_example_contract.clone(),
-            Some(_seed),
-            &auth_secret_key,
-            false,
-        )
+        .add_account(&mapping_example_contract.clone(), Some(_seed), false)
         .await
         .unwrap();
 
@@ -113,8 +123,8 @@ async fn mapping_example_test() -> Result<(), ClientError> {
     // Build a transaction request with the custom script
     let tx_increment_request = TransactionRequestBuilder::new()
         .with_custom_script(tx_script)
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
 
     // Execute the transaction locally
     let tx_result = client

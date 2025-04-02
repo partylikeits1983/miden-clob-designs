@@ -1,11 +1,14 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 
 use miden_client::{
     asset::FungibleAsset,
+    builder::ClientBuilder,
+    keystore::FilesystemKeyStore,
     note::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
         NoteRecipient, NoteScript, NoteTag, NoteType,
     },
+    rpc::{Endpoint, TonicRpcClient},
     transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt, Word,
 };
@@ -14,26 +17,40 @@ use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 use miden_objects::crypto::hash::rpo::Rpo256;
 use miden_objects::vm::AdviceMap;
 
-use miden_clob_designs::common::{
-    initialize_client, reset_store_sqlite, setup_accounts_and_faucets, wait_for_notes,
-};
+use miden_clob_designs::common::{reset_store_sqlite, setup_accounts_and_faucets, wait_for_notes};
 
 #[tokio::test]
 async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     reset_store_sqlite().await;
 
-    // create & sync the client
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
+
+    // Setup accounts and balances
     let balances = vec![
         vec![100, 0], // For account[0] => Alice
         vec![0, 100], // For account[1] => Bob
     ];
-    let (accounts, faucets) = setup_accounts_and_faucets(&mut client, 2, 2, balances).await?;
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 2, 2, balances).await?;
 
     // rename for clarity
     let alice_account = accounts[0].clone();
@@ -68,12 +85,12 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     let asset_amount = FungibleAsset::new(faucet_a.id(), 100).unwrap();
     let vault = NoteAssets::new(vec![asset_amount.into()])?;
     let custom_note = Note::new(vault, metadata, recipient);
-    println!("note hash: {:?}", custom_note.hash());
+    println!("note hash: {:?}", custom_note.commitment());
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(custom_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -117,7 +134,8 @@ async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args_commitment.into()))])
         .extend_advice_map(advice_map)
-        .build();
+        .build()
+        .unwrap();
 
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)

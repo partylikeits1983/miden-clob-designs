@@ -2,41 +2,64 @@ use tokio::time::{sleep, Duration};
 
 use miden_client::{
     asset::FungibleAsset,
+    builder::ClientBuilder,
+    keystore::FilesystemKeyStore,
     note::NoteType,
+    rpc::{Endpoint, TonicRpcClient},
     transaction::{OutputNote, TransactionRequestBuilder},
     ClientError, Felt,
 };
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_option_contract_note, initialize_client,
-    reset_store_sqlite, wait_for_notes,
+    create_basic_account, create_basic_faucet, create_option_contract_note, reset_store_sqlite,
+    wait_for_notes,
 };
 
 #[tokio::test]
 async fn option_contract_settle_test() -> Result<(), ClientError> {
+    // Reset the store and initialize the client.
     reset_store_sqlite().await;
 
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     // -------------------------------------------------------------------------
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client).await?;
+    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id());
-    let bob_account = create_basic_account(&mut client).await?;
+    let bob_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id());
 
     println!("\nDeploying a new fungible faucet.");
-    let faucet_a = create_basic_faucet(&mut client).await?;
+    let faucet_a = create_basic_faucet(&mut client, keystore.clone()).await?;
     println!("Faucet account A ID: {:?}", faucet_a.id());
-    let faucet_b = create_basic_faucet(&mut client).await?;
+    let faucet_b = create_basic_faucet(&mut client, keystore.clone()).await?;
     println!("Faucet account B ID: {:?}", faucet_b.id());
     client.sync_state().await?;
 
@@ -55,7 +78,8 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
         client.rng(),
     )
     .unwrap()
-    .build();
+    .build()
+    .unwrap();
     let tx_exec = client.new_transaction(faucet_a.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
@@ -70,7 +94,8 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(p2id_note.id(), None)])
-        .build();
+        .build()
+        .unwrap();
     let tx_exec = client
         .new_transaction(alice_account.id(), consume_req)
         .await?;
@@ -88,7 +113,8 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
         client.rng(),
     )
     .unwrap()
-    .build();
+    .build()
+    .unwrap();
     let tx_exec = client.new_transaction(faucet_b.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
@@ -103,7 +129,8 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(p2id_note.id(), None)])
-        .build();
+        .build()
+        .unwrap();
     let tx_exec = client
         .new_transaction(bob_account.id(), consume_req)
         .await?;
@@ -144,8 +171,8 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(option_contract_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -167,7 +194,8 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(option_contract_note.id(), None)])
         .with_expected_output_notes(vec![p2id_payback_note])
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
         .await
@@ -184,27 +212,43 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
 
 #[tokio::test]
 async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
+    // Reset the store and initialize the client.
     reset_store_sqlite().await;
 
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     // -------------------------------------------------------------------------
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client).await?;
+    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id());
-    let bob_account = create_basic_account(&mut client).await?;
+    let bob_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id());
 
     println!("\nDeploying a new fungible faucet.");
-    let faucet_a = create_basic_faucet(&mut client).await?;
+    let faucet_a = create_basic_faucet(&mut client, keystore.clone()).await?;
     println!("Faucet account A ID: {:?}", faucet_a.id());
-    let faucet_b = create_basic_faucet(&mut client).await?;
+    let faucet_b = create_basic_faucet(&mut client, keystore.clone()).await?;
     println!("Faucet account B ID: {:?}", faucet_b.id());
     client.sync_state().await?;
 
@@ -223,7 +267,8 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
         client.rng(),
     )
     .unwrap()
-    .build();
+    .build()
+    .unwrap();
     let tx_exec = client.new_transaction(faucet_a.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
@@ -238,7 +283,8 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(p2id_note.id(), None)])
-        .build();
+        .build()
+        .unwrap();
     let tx_exec = client
         .new_transaction(alice_account.id(), consume_req)
         .await?;
@@ -256,7 +302,8 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
         client.rng(),
     )
     .unwrap()
-    .build();
+    .build()
+    .unwrap();
     let tx_exec = client.new_transaction(faucet_b.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
@@ -271,7 +318,8 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(p2id_note.id(), None)])
-        .build();
+        .build()
+        .unwrap();
     let tx_exec = client
         .new_transaction(bob_account.id(), consume_req)
         .await?;
@@ -313,8 +361,8 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(option_contract_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -335,7 +383,8 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(option_contract_note.id(), None)])
         .with_expected_output_notes(vec![])
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), consume_custom_req)
         .await

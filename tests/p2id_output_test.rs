@@ -1,12 +1,15 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
     asset::FungibleAsset,
+    builder::ClientBuilder,
+    keystore::FilesystemKeyStore,
     note::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
         NoteRecipient, NoteScript, NoteTag, NoteType,
     },
+    rpc::{Endpoint, TonicRpcClient},
     transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt,
 };
@@ -14,31 +17,46 @@ use miden_client::{
 use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_p2id_note, initialize_client,
-    reset_store_sqlite, wait_for_notes,
+    create_basic_account, create_basic_faucet, create_p2id_note, reset_store_sqlite, wait_for_notes,
 };
 
 #[tokio::test]
 async fn p2id_output_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
     reset_store_sqlite().await;
-    let mut client = initialize_client().await?;
-    println!(
-        "Client initialized successfully. Latest block: {}",
-        client.sync_state().await.unwrap().block_num
+
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
     );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
 
     // -------------------------------------------------------------------------
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client).await?;
+    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id());
-    let bob_account = create_basic_account(&mut client).await?;
+    let bob_account = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id());
 
     println!("\nDeploying a new fungible faucet.");
-    let faucet = create_basic_faucet(&mut client).await?;
+    let faucet = create_basic_faucet(&mut client, keystore.clone()).await?;
     println!("Faucet account ID: {:?}", faucet.id());
     client.sync_state().await?;
 
@@ -57,7 +75,8 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         client.rng(),
     )
     .unwrap()
-    .build();
+    .build()
+    .unwrap();
     let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
@@ -71,7 +90,8 @@ async fn p2id_output_test() -> Result<(), ClientError> {
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(p2id_note.id(), None)])
-        .build();
+        .build()
+        .unwrap();
     let tx_exec = client
         .new_transaction(alice_account.id(), consume_req)
         .await?;
@@ -100,12 +120,12 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     )?;
     let vault = NoteAssets::new(vec![mint_amount.into()])?;
     let custom_note = Note::new(vault, metadata, recipient);
-    println!("note hash: {:?}", custom_note.hash());
+    println!("note hash: {:?}", custom_note.commitment());
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(custom_note.clone())])
-        .unwrap()
-        .build();
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(alice_account.id(), note_req)
         .await
@@ -156,8 +176,8 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), Some(note_args))])
         .with_expected_output_notes(vec![p2id_note])
-        .build();
-
+        .build()
+        .unwrap();
     let tx_result = client
         .new_transaction(bob_account.id(), consume_custom_req)
         .await

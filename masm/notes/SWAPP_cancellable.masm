@@ -4,6 +4,7 @@ use.std::sys
 use.miden::account
 use.std::math::u64
 use.miden::tx
+use.std::crypto::hashes::rpo
 
 # CONSTANTS
 # =================================================================================================
@@ -195,7 +196,7 @@ proc.build_p2id_recipient_hash
     push.8.4000
     # => [ptr, elements]
 
-    exec.note::compute_inputs_hash
+    exec.rpo::hash_memory
     # => [INPUTS_HASH, SERIAL_SCRIPT_HASH]
 
     hmerge
@@ -579,10 +580,10 @@ proc.execute_SWAP
         push.24.0
         # => [inputs, ptr]
 
-        exec.note::compute_inputs_hash
+        exec.rpo::hash_memory
         # => [INPUTS_HASH]
 
-        exec.note::get_script_hash
+        exec.note::get_script_root
         # => [SCRIPT_HASH, INPUTS_HASH]
 
         exec.get_new_swap_serial_num

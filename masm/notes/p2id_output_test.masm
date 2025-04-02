@@ -1,5 +1,6 @@
 use.miden::note
 use.miden::contracts::wallets::basic->wallet
+use.std::crypto::hashes::rpo
 
 const.ASSET=0
 const.ASSET_HALF=4
@@ -27,7 +28,7 @@ proc.build_p2id_recipient_hash
     push.8.16
     # => [ptr, elements]
 
-    exec.note::compute_inputs_hash
+    exec.rpo::hash_memory
     # => [INPUTS_HASH, SERIAL_SCRIPT_HASH]
 
     hmerge
