@@ -100,7 +100,7 @@ begin
 
     push.222 debug.stack drop
 
-    push.0 exec.note::get_inputs drop drop
+    push.0 exec.note::get_inputs drop drop drop
 
     padw mem_loadw.0
     # => [PUB_KEY_INPUTS, PUB_KEY]

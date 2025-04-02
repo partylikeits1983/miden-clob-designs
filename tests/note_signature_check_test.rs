@@ -1,5 +1,5 @@
 use miden_objects::vm::AdviceMap;
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, path::Path, sync::Arc, u64};
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
@@ -138,20 +138,14 @@ async fn falcon512_signature_check_note() -> Result<(), ClientError> {
     println!("\n[STEP 3] Create custom note");
 
     let alice_pub_key: Word = alice_key_pair.public_key().into();
-    let note_inputs_1 = [
+    let note_inputs = [
         alice_pub_key[0],
         alice_pub_key[1],
         alice_pub_key[2],
-        alice_pub_key[3],
+        Felt::new(alice_pub_key[3].as_int() - 1),
     ];
 
-    // @dev if note_inputs_1 is used, this is the error: Number of account storage slots exceeds the maximum limit of 25
-    let note_inputs = vec![
-        alice_pub_key[0],
-        alice_pub_key[1],
-        alice_pub_key[2],
-        Felt::new(4),
-    ];
+    // @dev if alice_pub_key is used, this is the error: Number of account storage slots exceeds the maximum limit of 25
 
     let assembler = TransactionKernel::assembler().with_debug_mode(true);
     let code = fs::read_to_string(Path::new("./masm/notes/SIG_CHECK.masm")).unwrap();
@@ -159,6 +153,9 @@ async fn falcon512_signature_check_note() -> Result<(), ClientError> {
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
     let note_inputs = NoteInputs::new(note_inputs.to_vec()).unwrap();
+
+    println!("note inputs: {:?}", note_inputs);
+
     let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
     let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
