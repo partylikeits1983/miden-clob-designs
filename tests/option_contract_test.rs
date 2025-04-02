@@ -51,10 +51,10 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
-    println!("Alice's account ID: {:?}", alice_account.id());
-    let bob_account = create_basic_account(&mut client, keystore.clone()).await?;
-    println!("Bob's account ID: {:?}", bob_account.id());
+    let (alice_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    println!("Alice's account ID: {:?}", alice_account.id().to_hex());
+    let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
     println!("\nDeploying a new fungible faucet.");
     let faucet_a = create_basic_faucet(&mut client, keystore.clone()).await?;
@@ -240,10 +240,11 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
-    println!("Alice's account ID: {:?}", alice_account.id());
-    let bob_account = create_basic_account(&mut client, keystore.clone()).await?;
-    println!("Bob's account ID: {:?}", bob_account.id());
+    let (alice_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    println!("Alice's account ID: {:?}", alice_account.id().to_hex());
+    let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    println!("Bob's account ID: {:?}", bob_account.id().to_hex());
+
 
     println!("\nDeploying a new fungible faucet.");
     let faucet_a = create_basic_faucet(&mut client, keystore.clone()).await?;

@@ -46,9 +46,9 @@ async fn note_input_commitment_test() -> Result<(), ClientError> {
     // STEP 1: Create account
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
+    let (alice_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id().to_hex());
-    let bob_account = create_basic_account(&mut client, keystore).await?;
+    let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
     // -------------------------------------------------------------------------

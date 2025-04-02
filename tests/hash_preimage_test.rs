@@ -50,9 +50,9 @@ async fn hash_preimage_note_test() -> Result<(), ClientError> {
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let alice_account = create_basic_account(&mut client, keystore.clone()).await?;
+    let (alice_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id().to_hex());
-    let bob_account = create_basic_account(&mut client, keystore.clone()).await?;
+    let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
     println!("\nDeploying a new fungible faucet.");

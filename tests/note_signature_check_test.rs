@@ -1,36 +1,66 @@
 use std::{fs, path::Path, sync::Arc};
+use miden_objects::vm::AdviceMap;
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
-    asset::FungibleAsset,
-    builder::ClientBuilder,
-    keystore::FilesystemKeyStore,
-    note::{
+    asset::FungibleAsset, builder::ClientBuilder, crypto::SecretKey, keystore::FilesystemKeyStore, note::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
         NoteRecipient, NoteScript, NoteTag, NoteType,
-    },
-    rpc::{Endpoint, TonicRpcClient},
-    transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
-    ClientError, Felt,
+    }, rpc::{Endpoint, TonicRpcClient}, transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder}, ClientError, Felt, Word
 };
 
-use miden_crypto::rand::FeltRng;
+use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_p2id_note, reset_store_sqlite, wait_for_notes,
+    create_basic_account, create_basic_faucet, reset_store_sqlite, wait_for_notes,
 };
 
+const N: usize = 512;
+fn mul_modulo_p(a: Polynomial<Felt>, b: Polynomial<Felt>) -> [u64; 1024] {
+  let mut c = [0; 2 * N];
+  for i in 0..N {
+      for j in 0..N {
+          c[i + j] += a.coefficients[i].as_int() * b.coefficients[j].as_int();
+      }
+  }
+  c
+}
+
+fn to_elements(poly: Polynomial<Felt>) -> Vec<Felt> {
+  poly.coefficients.to_vec()
+}
+
+fn generate_advice_stack_from_signature(
+  h: Polynomial<Felt>,
+  s2: Polynomial<Felt>,
+) -> Vec<u64> {
+  let pi = mul_modulo_p(h.clone(), s2.clone());
+
+  // lay the polynomials in order h then s2 then pi = h * s2
+  let mut polynomials = to_elements(h.clone());
+  polynomials.extend(to_elements(s2.clone()));
+  polynomials.extend(pi.iter().map(|a| Felt::new(*a)));
+
+  // get the challenge point and push it to the advice stack
+  let digest_polynomials = Hasher::hash_elements(&polynomials);
+  let challenge = (digest_polynomials[0], digest_polynomials[1]);
+  let mut advice_stack = vec![challenge.0.as_int(), challenge.1.as_int()];
+
+  // push the polynomials to the advice stack
+  let polynomials: Vec<u64> = polynomials.iter().map(|&e| e.into()).collect();
+  advice_stack.extend_from_slice(&polynomials);
+
+  advice_stack
+}
+
+
 #[tokio::test]
-async fn p2id_output_test() -> Result<(), ClientError> {
+async fn falcon512_signature_check_note() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
     reset_store_sqlite().await;
 
     // Initialize client
-    let endpoint = Endpoint::new(
-        "https".to_string(),
-        "rpc.testnet.miden.io".to_string(),
-        Some(443),
-    );
+    let endpoint = Endpoint::testnet();
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -50,14 +80,14 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     // STEP 1: Create accounts and deploy faucet
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Creating new accounts");
-    let (alice_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    let (alice_account, alice_key_pair) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id().to_hex());
     let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
     println!("\nDeploying a new fungible faucet.");
-    let faucet = create_basic_faucet(&mut client, keystore.clone()).await?;
-    println!("Faucet account ID: {:?}", faucet.id());
+    let faucet = create_basic_faucet(&mut client, keystore).await?;
+    println!("Faucet account ID: {:?}", faucet.id().to_hex());
     client.sync_state().await?;
 
     // -------------------------------------------------------------------------
@@ -67,7 +97,6 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let faucet_id = faucet.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-
     let tx_req = TransactionRequestBuilder::mint_fungible_asset(
         mint_amount,
         alice_account.id(),
@@ -80,9 +109,10 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
-    let p2id_note = match tx_exec.created_notes().get_note(0) {
-        OutputNote::Full(note) => note.clone(),
-        _ => panic!("Expected OutputNote::Full"),
+    let p2id_note = if let OutputNote::Full(note) = tx_exec.created_notes().get_note(0) {
+        note.clone()
+    } else {
+        panic!("Expected OutputNote::Full");
     };
 
     sleep(Duration::from_secs(3)).await;
@@ -103,13 +133,15 @@ async fn p2id_output_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     println!("\n[STEP 3] Create custom note");
 
+    // let note_inputs: Word = alice_key_pair.public_key().into();
+
     let assembler = TransactionKernel::assembler().with_debug_mode(true);
-    let code = fs::read_to_string(Path::new("./masm/notes/p2id_output_test.masm")).unwrap();
+    let code = fs::read_to_string(Path::new("./masm/notes/SIG_CHECK.masm")).unwrap();
     let rng = client.rng();
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
     let note_inputs = NoteInputs::new(vec![]).unwrap();
-    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs);
+    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
     let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
         alice_account.id(),
@@ -134,48 +166,53 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_result.executed_transaction().id()
     );
-    client.submit_transaction(tx_result).await?;
+    let _ = client.submit_transaction(tx_result).await;
     client.sync_state().await?;
 
-    wait_for_notes(&mut client, &bob_account, 1).await?;
+    println!("note inputs: {:?}", note_inputs.values());
+    // -------------------------------------------------------------------------
+    // STEP 4: Signing a hash 
+    // -------------------------------------------------------------------------
+
+    let mut data = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
+    data.splice(0..0, Word::default().iter().cloned());
+    let hashed_data = Hasher::hash_elements(&data);
+    println!("digest: {:?}", hashed_data);
+
+    // @dev make key pair used Alice's key pair
+    let key_pair= alice_key_pair;
+
+    // let h = key_pair.public_key().;
+    let h = key_pair.compute_pub_key_poly().coefficients.clone();
+    let h_poly = Polynomial::new(h).into();
+
+    let signature = key_pair.sign(hashed_data.into());
+    let s2: Polynomial<Felt> = signature.sig_poly().into();
+
+    // generate_data_probabilistic_product_test()
+    let advice_value_u64: Vec<u64> = generate_advice_stack_from_signature(h_poly, s2);
+    let advice_value_felt: Vec<Felt> = advice_value_u64
+    .into_iter()
+    .map(|value| Felt::new(value))
+    .collect();
+
+    let mut advice_map = AdviceMap::default();
+
+    let key = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(0)];
+
+    advice_map.insert(key.into(), advice_value_felt);
+
+    println!("pub key felts: {:?}", key_pair.public_key());
 
     // -------------------------------------------------------------------------
     // STEP 4: Consume the Custom Note
     // -------------------------------------------------------------------------
-    let p2id_note_asset = FungibleAsset::new(faucet.id(), 50).unwrap();
-    let p2id_serial_num = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
-
-    // Create the P2ID note that will be created in MASM.
-    let p2id_note = create_p2id_note(
-        bob_account.id(),
-        alice_account.id(),
-        vec![p2id_note_asset.into()],
-        NoteType::Public,
-        Felt::new(0),
-        p2id_serial_num,
-    )
-    .unwrap();
-
-    println!("p2id tag: {:?}", p2id_note.metadata().tag());
-    println!("p2id aux: {:?}", p2id_note.metadata().aux());
-    println!("p2id note type: {:?}", p2id_note.metadata().note_type());
-    println!("p2id hint: {:?}", p2id_note.metadata().execution_hint());
-    println!("recipient: {:?}", p2id_note.recipient().digest());
-    println!("p2id asset: {:?}", p2id_note.assets());
-
-    let note_tag_input: u64 = p2id_note.metadata().tag().into();
-    println!("input tag: {:?}", note_tag_input);
-
-    println!("\n[STEP 4] Bob consumes the Custom Note & Outputs P2ID Note for Alice");
-    let note_args = [
-        Felt::new(0),
-        Felt::new(note_tag_input),
-        alice_account.id().suffix(),
-        alice_account.id().prefix().as_felt(),
-    ];
+    wait_for_notes(&mut client, &bob_account, 1).await?;
+    println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
+    let secret = [Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
     let consume_custom_req = TransactionRequestBuilder::new()
-        .with_authenticated_input_notes([(custom_note.id(), Some(note_args))])
-        .with_expected_output_notes(vec![p2id_note])
+        .with_authenticated_input_notes([(custom_note.id(), Some(secret))])
+        .extend_advice_map(advice_map)
         .build()
         .unwrap();
     let tx_result = client
@@ -187,7 +224,7 @@ async fn p2id_output_test() -> Result<(), ClientError> {
         tx_result.executed_transaction().id()
     );
     println!("account delta: {:?}", tx_result.account_delta().vault());
-    client.submit_transaction(tx_result).await?;
+    let _ = client.submit_transaction(tx_result).await;
 
     Ok(())
 }

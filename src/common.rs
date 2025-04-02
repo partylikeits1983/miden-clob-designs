@@ -51,7 +51,7 @@ pub fn create_library(
 pub async fn create_basic_account(
     client: &mut Client,
     keystore: FilesystemKeyStore<StdRng>,
-) -> Result<miden_client::account::Account, ClientError> {
+) -> Result<(miden_client::account::Account, SecretKey), ClientError> {
     let mut init_seed = [0_u8; 32];
     client.rng().fill_bytes(&mut init_seed);
 
@@ -61,15 +61,15 @@ pub async fn create_basic_account(
         .anchor((&anchor_block).try_into().unwrap())
         .account_type(AccountType::RegularAccountUpdatableCode)
         .storage_mode(AccountStorageMode::Public)
-        .with_component(RpoFalcon512::new(key_pair.public_key()))
+        .with_component(RpoFalcon512::new(key_pair.public_key().clone()))
         .with_component(BasicWallet);
     let (account, seed) = builder.build().unwrap();
     client.add_account(&account, Some(seed), false).await?;
     keystore
-        .add_key(&AuthSecretKey::RpoFalcon512(key_pair))
+        .add_key(&AuthSecretKey::RpoFalcon512(key_pair.clone()))
         .unwrap();
 
-    Ok(account)
+    Ok((account, key_pair))
 }
 
 pub async fn create_basic_faucet(
@@ -111,7 +111,7 @@ pub async fn setup_accounts_and_faucets(
     // 1) Create the [num_accounts] basic accounts
     let mut accounts = Vec::with_capacity(num_accounts);
     for i in 0..num_accounts {
-        let account = create_basic_account(client, keystore.clone()).await?;
+        let (account, _) = create_basic_account(client, keystore.clone()).await?;
         println!("Created Account #{i} => ID: {:?}", account.id());
         accounts.push(account);
     }
