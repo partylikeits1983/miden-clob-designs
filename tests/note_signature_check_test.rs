@@ -142,7 +142,7 @@ async fn falcon512_signature_check_note() -> Result<(), ClientError> {
         alice_pub_key[0],
         alice_pub_key[1],
         alice_pub_key[2],
-        Felt::new(alice_pub_key[3].as_int() - 1),
+        Felt::new(alice_pub_key[3].as_int() + 1),
     ];
 
     // @dev if alice_pub_key is used, this is the error: Number of account storage slots exceeds the maximum limit of 25
