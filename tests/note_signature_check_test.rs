@@ -86,7 +86,7 @@ async fn falcon512_signature_check_note() -> Result<(), ClientError> {
     let (alice_account, alice_key_pair) =
         create_basic_account(&mut client, keystore.clone()).await?;
     println!("Alice's account ID: {:?}", alice_account.id().to_hex());
-    let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    let (bob_account, bob_key_pair) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
     println!("\nDeploying a new fungible faucet.");
@@ -137,11 +137,11 @@ async fn falcon512_signature_check_note() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     println!("\n[STEP 3] Create custom note");
 
-    let alice_pub_key: Word = alice_key_pair.public_key().into();
+    let alice_pub_key: Word = bob_key_pair.public_key().into();
     let note_inputs = [
         alice_pub_key[0],
         alice_pub_key[1],
-        alice_pub_key[2],
+        Felt::new(alice_pub_key[2].as_int() + 0),
         Felt::new(alice_pub_key[3].as_int() + 0),
     ];
 
