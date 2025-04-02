@@ -4,8 +4,8 @@
 # based upon the signature of the creator of the swap note.
 # this allows for users to update the price of the SWAPP note in near real time
 
-# use.miden::note
-# use.miden::contracts::wallets::basic->wallet
+use.miden::note
+use.miden::contracts::wallets::basic->wallet
 
 const.M=12289
 # PUBLIC-KEY-HASH RECOVERY FROM SIGNATURE
@@ -82,11 +82,11 @@ end
 begin
     push.111 debug.stack drop
 
-    dropw
+    # dropw
 
-    # push.0 exec.note::get_inputs drop drop
+    
 
-    push.0.0.0.0
+    # push.0.0.0.0
     # => [KEY]
 
     adv.push_mapval
@@ -99,6 +99,8 @@ begin
     # => [PUB_KEY]
 
     push.222 debug.stack drop
+
+    push.0 exec.note::get_inputs drop drop
 
     padw mem_loadw.0
     # => [PUB_KEY_INPUTS, PUB_KEY]

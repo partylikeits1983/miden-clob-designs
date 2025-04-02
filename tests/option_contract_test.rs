@@ -245,7 +245,6 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
     let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
     println!("Bob's account ID: {:?}", bob_account.id().to_hex());
 
-
     println!("\nDeploying a new fungible faucet.");
     let faucet_a = create_basic_faucet(&mut client, keystore.clone()).await?;
     println!("Faucet account A ID: {:?}", faucet_a.id());
