@@ -138,3 +138,74 @@ export.check_signer
 
     exec.sys::truncate_stack
 end
+
+# OS => [PUB_KEY_1, PUB_KEY_2, ..., PUB_KEY_10]
+export.check_signers
+
+    push.111 debug.stack drop
+    mem_storew.4
+    mem_storew.8 dropw
+    mem_storew.12 dropw
+    mem_storew.16 dropw
+
+    repeat.4
+        dropw
+    end
+
+    push.222 debug.stack drop
+
+    mem_storew.20 dropw
+    mem_storew.24 dropw
+    mem_storew.28 dropw
+    mem_storew.32 dropw
+    mem_storew.36 dropw
+    mem_storew.40 dropw
+
+    push.222 debug.stack debug.mem drop
+
+    push.1
+    # => [count]
+
+    mem_store.0
+
+    push.1
+    while.true
+        mem_load.0
+        # => [count]
+
+        push.4 mul
+        # => [mem_addr]
+
+        mem_loadw
+
+        adv.push_mapval
+
+        call.falcon_recover_pub_key
+        # => [PUB_KEY]
+
+        push.333 debug.stack drop
+
+        dropw
+        # => []
+
+        mem_load.0
+
+        # iterations
+        push.3
+
+        lte
+        if.true
+            mem_load.0
+            push.1 add
+            mem_store.0
+
+            push.1
+        else
+            push.0
+        end
+
+    end
+
+    exec.sys::truncate_stack
+    # => []
+end

@@ -8,6 +8,7 @@ use miden_client::{
     account::{AccountStorageMode, AccountType},
     auth::AuthSecretKey,
     builder::ClientBuilder,
+    crypto::SecretKey,
     keystore::FilesystemKeyStore,
     rpc::{Endpoint, TonicRpcClient},
     transaction::{TransactionKernel, TransactionRequestBuilder},
@@ -18,13 +19,16 @@ use miden_clob_designs::common::{
     create_basic_account, create_basic_faucet, create_library, create_signature_check_account,
     generate_advice_stack_from_signature, reset_store_sqlite,
 };
-use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, rand::FeltRng};
+use miden_crypto::{
+    dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, rand::FeltRng, FieldElement,
+};
 use miden_objects::{
     account::{AccountBuilder, AccountComponent, StorageMap, StorageSlot},
     assembly::Assembler,
     transaction::TransactionScript,
     vm::AdviceMap,
 };
+use tokio::time::Instant;
 
 #[tokio::test]
 async fn account_signature_check() -> Result<(), ClientError> {
@@ -156,6 +160,193 @@ async fn account_signature_check() -> Result<(), ClientError> {
         "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_id
     );
+
+    // Submit transaction to the network
+    let _ = client.submit_transaction(tx_result).await;
+
+    client.sync_state().await.unwrap();
+
+    let account = client
+        .get_account(signature_check_contract.id())
+        .await
+        .unwrap();
+    let index = 1;
+    let key = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(0)];
+    println!(
+        "Mapping state\n Index: {:?}\n Key: {:?}\n Value: {:?}",
+        index,
+        key,
+        account
+            .unwrap()
+            .account()
+            .storage()
+            .get_map_item(index, key)
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn multi_signature_benchmark() -> Result<(), ClientError> {
+    // Reset the store and initialize the client.
+    reset_store_sqlite().await;
+
+    // Initialize client
+    let endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
+    );
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
+
+    let (alice_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    println!("Alice's account ID: {:?}", alice_account.id().to_hex());
+    let (bob_account, _) = create_basic_account(&mut client, keystore.clone()).await?;
+    println!("Bob's account ID: {:?}", bob_account.id().to_hex());
+
+    println!("\nDeploying a new fungible faucet.");
+    let faucet = create_basic_faucet(&mut client, keystore.clone()).await?;
+    println!("Faucet account ID: {:?}", faucet.id());
+    client.sync_state().await?;
+
+    // -------------------------------------------------------------------------
+    // STEP 0: Create signature check smart contract
+    // -------------------------------------------------------------------------
+    println!("\n[STEP 0] Deploy a smart contract");
+
+    let signature_check_contract = create_signature_check_account(&mut client).await.unwrap();
+
+    use std::fs;
+    use std::path::Path;
+
+    // -------------------------------------------------------------------------
+    // STEP 1: Prepare the Script
+    // -------------------------------------------------------------------------
+    println!("\n[STEP 1] Prepare Script With Public Keys");
+
+    // Read the account signature script template.
+    let code = fs::read_to_string(Path::new(
+        "./masm/scripts/multi_signature_check_script.masm",
+    ))
+    .unwrap();
+
+    let mut script_code = code.clone();
+
+    let mut keys = Vec::new();
+    for i in 0..10 {
+        let key = SecretKey::with_rng(client.rng());
+        keys.push(key);
+
+        // Convert public key to a Word, which is [FieldElement; 4] or Vec<FieldElement>
+        let pub_key_word: Word = keys[i].public_key().into();
+
+        // Format "x.x.x.x"
+        let concatenated_pub_key = format!(
+            "{}.{}.{}.{}",
+            pub_key_word[0], pub_key_word[1], pub_key_word[2], pub_key_word[3]
+        );
+
+        println!("pub key: {:?}", concatenated_pub_key);
+
+        // Replace {PUB_KEY_i} with that string
+        script_code = script_code.replace(&format!("{{PUB_KEY_{}}}", i), &concatenated_pub_key);
+    }
+
+    println!("Final script:\n{}", script_code);
+
+    let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
+    let file_path = Path::new("./masm/accounts/account_signature_check.masm");
+    let account_code = fs::read_to_string(file_path).unwrap();
+
+    let account_component_lib = create_library(
+        assembler.clone(),
+        "external_contract::signature_check_contract",
+        &account_code,
+    )
+    .unwrap();
+
+    let tx_script = TransactionScript::compile(
+        script_code,
+        [],
+        assembler.with_library(&account_component_lib).unwrap(),
+    )
+    .unwrap();
+
+    // -------------------------------------------------------------------------
+    // STEP 2: Hash & Sign Data with Each Key and Populate the Advice Map
+    // -------------------------------------------------------------------------
+
+    // Prepare some data to hash (prepend the default word as required).
+    let mut data = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
+    data.splice(0..0, Word::default().iter().cloned());
+    let hashed_data = Hasher::hash_elements(&data);
+    println!("digest: {:?}", hashed_data);
+
+    // Initialize an empty advice map.
+    let mut advice_map = AdviceMap::default();
+
+    for key in keys.iter() {
+        let signature = key.sign(hashed_data.into());
+
+        // Convert the signature into its polynomial representation.
+        let s2: Polynomial<Felt> = signature.sig_poly().into();
+
+        // Compute the public key polynomial and convert to a word.
+        let h = key.compute_pub_key_poly().coefficients.clone();
+        let h_poly = Polynomial::new(h).into();
+
+        // Generate advice values from the signature.
+        let advice_value_u64: Vec<u64> = generate_advice_stack_from_signature(h_poly, s2);
+        let advice_value_felt: Vec<Felt> = advice_value_u64
+            .into_iter()
+            .map(|value| Felt::new(value))
+            .collect();
+
+        // Convert the public key into a word (vec of 4 field elements).
+        let advice_key: Word = key.public_key().into();
+
+        // Insert into the advice map: key (as Word) -> advice values.
+        advice_map.insert(advice_key.into(), advice_value_felt);
+    }
+
+    // Build a transaction request with the custom script
+    let tx_increment_request = TransactionRequestBuilder::new()
+        .with_custom_script(tx_script)
+        .extend_advice_map(advice_map)
+        .build()
+        .unwrap();
+    //
+    let start = Instant::now();
+
+    // Execute the transaction locally
+    let tx_result = client
+        .new_transaction(signature_check_contract.id(), tx_increment_request)
+        .await
+        .unwrap();
+
+    // Retrieve the transaction id
+    let tx_id = tx_result.executed_transaction().id();
+    println!(
+        "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
+        tx_id
+    );
+
+    // Calculate the elapsed time
+    let duration = start.elapsed();
+    println!("multisig verify tx executed in: {:?}", duration);
 
     // Submit transaction to the network
     let _ = client.submit_transaction(tx_result).await;

@@ -1,0 +1,23 @@
+use.external_contract::signature_check_contract
+use.std::sys
+
+begin
+    push.{PUB_KEY_0}
+    push.{PUB_KEY_1}
+    push.{PUB_KEY_2}
+    push.{PUB_KEY_3}
+    push.{PUB_KEY_4}
+    push.{PUB_KEY_5}
+    push.{PUB_KEY_6}
+    push.{PUB_KEY_7}
+    push.{PUB_KEY_8}
+    push.{PUB_KEY_9}
+    # => [PUB_KEY_0, PUB_KEY_1, ..., PUB_KEY_9]
+
+    push.111 debug.stack drop
+
+    call.signature_check_contract::check_signers
+
+    dropw
+    exec.sys::truncate_stack
+end
