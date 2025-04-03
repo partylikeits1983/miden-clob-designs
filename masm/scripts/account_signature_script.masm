@@ -1,0 +1,28 @@
+use.external_contract::signature_check_contract
+use.std::sys
+
+begin
+    push.{PUB_KEY}
+
+    dupw mem_storew.0
+    # => [PUB_KEY]
+
+    call.signature_check_contract::add_signer
+    # => []
+
+    mem_loadw.0
+    # => [PUB_KEY]
+
+    adv.push_mapval
+
+    push.303 debug.stack drop
+
+    call.signature_check_contract::check_signer
+    # => [is_valid_sig]
+
+    push.404 debug.stack drop
+
+    dropw
+
+    exec.sys::truncate_stack
+end

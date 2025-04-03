@@ -19,43 +19,9 @@ use miden_client::{
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, reset_store_sqlite, wait_for_notes,
+    create_basic_account, create_basic_faucet, generate_advice_stack_from_signature,
+    reset_store_sqlite, wait_for_notes,
 };
-
-const N: usize = 512;
-fn mul_modulo_p(a: Polynomial<Felt>, b: Polynomial<Felt>) -> [u64; 1024] {
-    let mut c = [0; 2 * N];
-    for i in 0..N {
-        for j in 0..N {
-            c[i + j] += a.coefficients[i].as_int() * b.coefficients[j].as_int();
-        }
-    }
-    c
-}
-
-fn to_elements(poly: Polynomial<Felt>) -> Vec<Felt> {
-    poly.coefficients.to_vec()
-}
-
-fn generate_advice_stack_from_signature(h: Polynomial<Felt>, s2: Polynomial<Felt>) -> Vec<u64> {
-    let pi = mul_modulo_p(h.clone(), s2.clone());
-
-    // lay the polynomials in order h then s2 then pi = h * s2
-    let mut polynomials = to_elements(h.clone());
-    polynomials.extend(to_elements(s2.clone()));
-    polynomials.extend(pi.iter().map(|a| Felt::new(*a)));
-
-    // get the challenge point and push it to the advice stack
-    let digest_polynomials = Hasher::hash_elements(&polynomials);
-    let challenge = (digest_polynomials[0], digest_polynomials[1]);
-    let mut advice_stack = vec![challenge.0.as_int(), challenge.1.as_int()];
-
-    // push the polynomials to the advice stack
-    let polynomials: Vec<u64> = polynomials.iter().map(|&e| e.into()).collect();
-    advice_stack.extend_from_slice(&polynomials);
-
-    advice_stack
-}
 
 #[tokio::test]
 async fn falcon512_signature_check_note() -> Result<(), ClientError> {

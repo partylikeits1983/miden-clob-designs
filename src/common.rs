@@ -2,14 +2,19 @@ use miden_assembly::{
     ast::{Module, ModuleKind},
     Assembler, DefaultSourceManager, LibraryPath,
 };
+use miden_crypto::dsa::rpo_falcon512::Polynomial;
 use rand::{rngs::StdRng, RngCore};
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
     account::{
         component::{BasicFungibleFaucet, BasicWallet, RpoFalcon512},
-        Account, AccountBuilder, AccountId, AccountStorageMode, AccountType,
+        Account, AccountBuilder, AccountId, AccountStorageMode, AccountType, StorageSlot,
     },
     asset::{Asset, FungibleAsset, TokenSymbol},
     auth::AuthSecretKey,
@@ -22,17 +27,48 @@ use miden_client::{
     transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
     Client, ClientError, Felt, Word,
 };
-use miden_objects::{Hasher, NoteError};
+use miden_objects::{
+    account::{AccountComponent, StorageMap},
+    Hasher, NoteError,
+};
 
-/// Creates a library from the provided source code and library path.
-///
-/// # Arguments
-/// * `assembler` - The assembler instance used to build the library.
-/// * `library_path` - The full library path as a string (e.g., "custom_contract::mapping_example").
-/// * `source_code` - The MASM source code for the module.
-///
-/// # Returns
-/// A `miden_assembly::Library` that can be added to the transaction script.
+// Signature verification code:
+
+const N: usize = 512;
+fn mul_modulo_p(a: Polynomial<Felt>, b: Polynomial<Felt>) -> [u64; 1024] {
+    let mut c = [0; 2 * N];
+    for i in 0..N {
+        for j in 0..N {
+            c[i + j] += a.coefficients[i].as_int() * b.coefficients[j].as_int();
+        }
+    }
+    c
+}
+
+fn to_elements(poly: Polynomial<Felt>) -> Vec<Felt> {
+    poly.coefficients.to_vec()
+}
+
+pub fn generate_advice_stack_from_signature(h: Polynomial<Felt>, s2: Polynomial<Felt>) -> Vec<u64> {
+    let pi = mul_modulo_p(h.clone(), s2.clone());
+
+    // lay the polynomials in order h then s2 then pi = h * s2
+    let mut polynomials = to_elements(h.clone());
+    polynomials.extend(to_elements(s2.clone()));
+    polynomials.extend(pi.iter().map(|a| Felt::new(*a)));
+
+    // get the challenge point and push it to the advice stack
+    let digest_polynomials = Hasher::hash_elements(&polynomials);
+    let challenge = (digest_polynomials[0], digest_polynomials[1]);
+    let mut advice_stack = vec![challenge.0.as_int(), challenge.1.as_int()];
+
+    // push the polynomials to the advice stack
+    let polynomials: Vec<u64> = polynomials.iter().map(|&e| e.into()).collect();
+    advice_stack.extend_from_slice(&polynomials);
+
+    advice_stack
+}
+
 pub fn create_library(
     assembler: Assembler,
     library_path: &str,
@@ -94,6 +130,43 @@ pub async fn create_basic_faucet(
     keystore
         .add_key(&AuthSecretKey::RpoFalcon512(key_pair))
         .unwrap();
+    Ok(account)
+}
+
+pub async fn create_signature_check_account(
+    client: &mut Client,
+) -> Result<miden_client::account::Account, ClientError> {
+    let mut init_seed = [0_u8; 32];
+    client.rng().fill_bytes(&mut init_seed);
+
+    let file_path = Path::new("./masm/accounts/account_signature_check.masm");
+    let account_code = fs::read_to_string(file_path).unwrap();
+
+    let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
+
+    let empty_storage_slot = StorageSlot::empty_value();
+    let storage_map = StorageMap::new();
+    let storage_slot_map = StorageSlot::Map(storage_map.clone());
+
+    let account_component = AccountComponent::compile(
+        account_code.clone(),
+        assembler.clone(),
+        vec![empty_storage_slot, storage_slot_map],
+    )
+    .unwrap()
+    .with_supports_all_types();
+
+    let anchor_block = client.get_latest_epoch_block().await.unwrap();
+    let builder = AccountBuilder::new(init_seed)
+        .anchor((&anchor_block).try_into().unwrap())
+        .account_type(AccountType::RegularAccountUpdatableCode)
+        .storage_mode(AccountStorageMode::Public)
+        .with_component(BasicWallet)
+        .with_component(account_component);
+
+    let (account, seed) = builder.build().unwrap();
+    client.add_account(&account, Some(seed), false).await?;
+
     Ok(account)
 }
 
@@ -230,18 +303,6 @@ pub async fn get_swapp_note(
     Ok(())
 }
 
-// Partially Fillable SWAP note
-// ================================================================================================
-
-/// Generates a SWAP note - swap of assets between two accounts - and returns the note as well as
-/// [NoteDetails] for the payback note.
-///
-/// This script enables a swap of 2 assets between the `sender` account and any other account that
-/// is willing to consume the note. The consumer will receive the `offered_asset` and will create a
-/// new P2ID note with `sender` as target, containing the `requested_asset`.
-///
-/// # Errors
-/// Returns an error if deserialization or compilation of the `SWAP` script fails.
 pub fn create_partial_swap_note(
     creator: AccountId,
     last_consumer: AccountId,
@@ -344,7 +405,6 @@ pub fn create_partial_swap_private_note(
 
     let aux = Felt::new(0);
 
-    // build the outgoing note
     let metadata = NoteMetadata::new(
         last_consumer,
         note_type,
@@ -495,15 +555,6 @@ pub fn get_p2id_serial_num(swap_serial_num: [Felt; 4], swap_count: u64) -> [Felt
     p2id_serial_num.into()
 }
 
-/// Generates a SWAP note - swap of assets between two accounts - and returns the note as well as
-/// [NoteDetails] for the payback note.
-///
-/// This script enables a swap of 2 assets between the `sender` account and any other account that
-/// is willing to consume the note. The consumer will receive the `offered_asset` and will create a
-/// new P2ID note with `sender` as target, containing the `requested_asset`.
-///
-/// # Errors
-/// Returns an error if deserialization or compilation of the `SWAP` script fails.
 pub fn create_option_contract_note<R: FeltRng>(
     underwriter: AccountId,
     buyer: AccountId,

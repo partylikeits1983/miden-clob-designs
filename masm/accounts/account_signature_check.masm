@@ -1,0 +1,140 @@
+use.miden::note
+use.miden::contracts::wallets::basic->wallet
+use.miden::account
+use.std::sys
+
+const.M=12289
+# PUBLIC-KEY-HASH RECOVERY FROM SIGNATURE
+# =============================================================================================
+
+#!   Operand stack: []
+#!   Advice stack:  [tau0, tau1, h_0, ..., h_511, s2_0, ..., s2_511, pi_0, ..., pi_1022, ...]
+#! Outputs:
+#!   Operand stack: [PK_HASH]
+proc.falcon_recover_pub_key.16
+    ## Load the evaluation point tau from the advice tape, compute its inverse and save both
+    ## Note that we will evaluate the polynomials at `tau_inv = tau^{-1}` as we are loading the coefficients
+    ## in the normal order i.e., not in reversed order required for Horner evaluation.
+    ## This means that the equality we will be checking is
+    ## pi(tau_inv) * tau^1023 == h(tau_inv) * tau^511 * s2(tau_inv) * tau^511
+    ##
+    ## which simplifies to
+    ##
+    ## pi(tau_inv) * tau == h(tau_inv) * s2(tau_inv)
+    adv_push.2
+    dup.1 dup.1 ext2inv
+    movup.3 movup.3
+    loc_storew.4
+    # => [tau1, tau0, tau_inv1, tau_inv0, Y, 0, 0, 0, 0, ptr, tau_inv_ptr, acc1, acc0, ...]
+
+    # Load the coefficients of the h polynomial and evaluate it at tau_inv
+    exec.eval_tau_inv
+    # => [Y, D, C, ptr, tau_inv_ptr, acc1, acc0, ...] where D is the digest expected to be PK hash
+
+    dropw
+    # => [D, C, ptr, tau_inv_ptr, acc1, acc0, ...]
+
+    repeat.4
+        swapw
+        dropw
+    end
+    # => [D]
+end
+
+#! Loads and evaluates s2 at tau_inv
+#! Inputs:
+#!   Operand stack: [tau1, tau0, tau_inv1, tau_inv0, Y, 0, 0, 0, 0, ptr, tau_inv_ptr, acc1, acc0, ...]
+#!   Advice stack:  [tau0, tau1, h_0, ..., h_511, s2_0, ..., s2_511, pi_0, ..., pi_1022, ...]
+#! Outputs:
+#!   Operand stack: [Y, D, C, ptr, tau_inv_ptr, acc1, acc0, ...] where D is the digest expected to be PK
+#!   Advice stack:  [h_0, ..., h_511, s2_0, ..., s2_511, pi_0, ..., pi_1022, ...]
+proc.eval_tau_inv
+    repeat.64
+        adv_pipe
+
+        # check that all coefficients are less than Falcon prime
+        dupw.1
+        u32assert2
+        u32overflowing_sub.M assert drop
+        u32overflowing_sub.M assert drop
+        u32assert2
+        u32overflowing_sub.M assert drop
+        u32overflowing_sub.M assert drop
+
+        dupw
+        u32assert2
+        u32overflowing_sub.M assert drop
+        u32overflowing_sub.M assert drop
+        u32assert2
+        u32overflowing_sub.M assert drop
+        u32overflowing_sub.M assert drop
+
+        horner_eval_base
+
+        hperm
+    end
+end
+
+# MULTI-SIG WALLET PoC
+# =============================================================================================
+
+# OS => [PUB_KEY]
+# AS => []
+export.add_signer
+    push.222 debug.stack drop
+
+    push.1.1.1.1
+    swapw
+    # => [PUB_KEY, TRUE]
+
+    # The storage map is in storage slot 1
+    push.1
+    # => [index, KEY, TRUE]
+
+    # Setting the key value pair in the map
+    exec.account::set_map_item
+    # => [OLD_MAP_ROOT, OLD_MAP_VALUE]
+
+    dropw dropw dropw dropw
+    # => []
+
+    # Incrementing the nonce by 1
+    push.1 exec.account::incr_nonce
+    # => []
+
+end
+
+# input OS => []
+# input AS => [falcon512_sig]
+# output => [is_valid_sig]
+export.check_signer
+    # for signature in signatures:
+
+    call.falcon_recover_pub_key
+    # => [PUB_KEY]
+
+    # look up in mapping to see if pub key exists
+
+    push.1
+    # => [index, PUB_KEY]
+
+    exec.account::get_map_item
+    # => [VALUE]
+
+    push.1.1.1.1
+    # => [TRUE, VALUE]
+
+    eqw
+    if.true
+        # do some state change
+
+        dropw dropw
+        push.1
+    else
+        # panik
+        push.0.1 assert_eq
+    end
+    # => [is_valid_sig]
+
+    exec.sys::truncate_stack
+end
