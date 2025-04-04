@@ -2,6 +2,7 @@ use.miden::note
 use.miden::contracts::wallets::basic->wallet
 use.miden::account
 use.std::sys
+use.std::crypto::dsa::rpo_falcon512
 
 # constants
 const.ITERATIONS_MEM_ADDR=100
@@ -239,6 +240,72 @@ export.check_signers_adivce_map
         # => []
 
         call.falcon_recover_pub_key
+        # => [PUB_KEY]
+
+        push.333 debug.stack drop
+
+        dropw
+        # => []
+
+        mem_load.0
+
+        # iterations
+        # push.ITERATIONS
+        mem_load.ITERATIONS_MEM_ADDR
+
+        lt
+        if.true
+            mem_load.0
+            push.1 add
+            mem_store.0
+
+            push.1
+        else
+            push.0
+        end
+
+    end
+
+    # increment nonce to simulate state change
+    push.1 exec.account::incr_nonce
+
+    exec.sys::truncate_stack
+    # => []
+end
+
+# OS => [number_of_iterations]
+# AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
+export.verify_signatures
+    mem_store.ITERATIONS_MEM_ADDR
+
+    push.0
+    # => [count]
+
+    mem_store.0
+    # => []
+
+    push.1
+    while.true
+        mem_load.0
+        # => [count]
+
+        push.0.0.0
+        # => [KEY]
+
+        adv.push_mapval
+        # => [KEY]
+
+        adv_pipe
+        # => [MSG, PK]
+
+        swapw
+        # => [PK, MSG]
+
+        push.222 debug.stack drop
+
+        exec.rpo_falcon512::verify
+
+        # call.falcon_recover_pub_key
         # => [PUB_KEY]
 
         push.333 debug.stack drop

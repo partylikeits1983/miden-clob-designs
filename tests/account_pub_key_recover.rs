@@ -14,6 +14,7 @@ use miden_clob_designs::common::{
     delete_keystore_and_store, generate_advice_stack_from_signature,
 };
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
+use miden_objects::transaction::TransactionMeasurements;
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
 use tokio::time::Instant;
 
@@ -658,6 +659,14 @@ async fn multi_signature_benchmark_advice_provider_100() -> Result<(), ClientErr
         "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_id
     );
+
+    let executed_tx: &miden_client::transaction::ExecutedTransaction =
+        tx_result.executed_transaction();
+    let total_cycles = executed_tx.measurements().total_cycles();
+
+    println!("total cycles: {:?}", total_cycles);
+
+    // println!("total cycles: {:?}", tx_result.executed_transaction().);
 
     // Submit transaction to the network
     let _ = client.submit_transaction(tx_result).await;
