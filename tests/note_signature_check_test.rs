@@ -5,7 +5,6 @@ use tokio::time::{sleep, Duration};
 use miden_client::{
     asset::FungibleAsset,
     builder::ClientBuilder,
-    crypto::SecretKey,
     keystore::FilesystemKeyStore,
     note::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,

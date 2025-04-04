@@ -1,14 +1,9 @@
 use std::{fs, path::Path, sync::Arc};
 
-use rand::{Rng, RngCore};
-use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-
+use rand::RngCore;
 use miden_client::{
     account::{AccountStorageMode, AccountType},
-    auth::AuthSecretKey,
     builder::ClientBuilder,
-    keystore::FilesystemKeyStore,
     rpc::{Endpoint, TonicRpcClient},
     transaction::{TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt,

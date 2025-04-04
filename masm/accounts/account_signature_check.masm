@@ -4,7 +4,7 @@ use.miden::account
 use.std::sys
 
 # constants
-const.ITERATIONS=9
+const.ITERATIONS=99
 
 const.M=12289
 # PUBLIC-KEY-HASH RECOVERY FROM SIGNATURE
