@@ -3,6 +3,9 @@ use.miden::contracts::wallets::basic->wallet
 use.miden::account
 use.std::sys
 
+# constants
+const.ITERATIONS=9
+
 const.M=12289
 # PUBLIC-KEY-HASH RECOVERY FROM SIGNATURE
 # =============================================================================================
@@ -205,6 +208,62 @@ export.check_signers
         end
 
     end
+
+    exec.sys::truncate_stack
+    # => []
+end
+
+# AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
+export.check_signers_adivce_map
+
+    push.0
+    # => [count]
+
+    mem_store.0
+    # => []
+
+    push.1
+    while.true
+        mem_load.0
+        # => [count]
+
+        push.0.0.0
+        # => [KEY]
+
+        adv.push_mapval
+        # => [KEY]
+
+        dropw
+        # => []
+
+        call.falcon_recover_pub_key
+        # => [PUB_KEY]
+
+        push.333 debug.stack drop
+
+        dropw
+        # => []
+
+        mem_load.0
+
+        # iterations
+        push.ITERATIONS
+
+        lt
+        if.true
+            mem_load.0
+            push.1 add
+            mem_store.0
+
+            push.1
+        else
+            push.0
+        end
+
+    end
+
+    # increment nonce to simulate state change
+    push.1 exec.account::incr_nonce
 
     exec.sys::truncate_stack
     # => []

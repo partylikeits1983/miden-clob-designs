@@ -1,0 +1,10 @@
+use.external_contract::signature_check_contract
+use.std::sys
+
+# AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
+begin
+    call.signature_check_contract::check_signers_adivce_map
+
+    dropw
+    exec.sys::truncate_stack
+end
