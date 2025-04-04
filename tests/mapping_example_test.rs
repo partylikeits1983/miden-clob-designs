@@ -1,6 +1,5 @@
 use std::{fs, path::Path, sync::Arc};
 
-use rand::RngCore;
 use miden_client::{
     account::{AccountStorageMode, AccountType},
     builder::ClientBuilder,
@@ -8,6 +7,7 @@ use miden_client::{
     transaction::{TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt,
 };
+use rand::RngCore;
 
 use miden_objects::{
     account::{AccountBuilder, AccountComponent, StorageMap, StorageSlot},
@@ -15,12 +15,12 @@ use miden_objects::{
     transaction::TransactionScript,
 };
 
-use miden_clob_designs::common::{create_library, reset_store_sqlite};
+use miden_clob_designs::common::{create_library, delete_keystore_and_store};
 
 #[tokio::test]
 async fn mapping_example_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(

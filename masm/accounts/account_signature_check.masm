@@ -4,7 +4,7 @@ use.miden::account
 use.std::sys
 
 # constants
-const.ITERATIONS=99
+const.ITERATIONS_MEM_ADDR=100
 
 const.M=12289
 # PUBLIC-KEY-HASH RECOVERY FROM SIGNATURE
@@ -213,8 +213,10 @@ export.check_signers
     # => []
 end
 
+# OS => [number_of_iterations]
 # AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
 export.check_signers_adivce_map
+    mem_store.ITERATIONS_MEM_ADDR
 
     push.0
     # => [count]
@@ -247,7 +249,8 @@ export.check_signers_adivce_map
         mem_load.0
 
         # iterations
-        push.ITERATIONS
+        # push.ITERATIONS
+        mem_load.ITERATIONS_MEM_ADDR
 
         lt
         if.true

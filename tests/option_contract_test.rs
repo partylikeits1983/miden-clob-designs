@@ -16,14 +16,14 @@ use std::{
 };
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_option_contract_note, reset_store_sqlite,
-    wait_for_notes,
+    create_basic_account, create_basic_faucet, create_option_contract_note,
+    delete_keystore_and_store, wait_for_notes,
 };
 
 #[tokio::test]
 async fn option_contract_settle_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -213,7 +213,7 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
 #[tokio::test]
 async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(

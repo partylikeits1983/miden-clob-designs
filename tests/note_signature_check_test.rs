@@ -18,14 +18,14 @@ use miden_client::{
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, generate_advice_stack_from_signature,
-    reset_store_sqlite, wait_for_notes,
+    create_basic_account, create_basic_faucet, delete_keystore_and_store,
+    generate_advice_stack_from_signature, wait_for_notes,
 };
 
 #[tokio::test]
 async fn falcon512_signature_check_note() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::testnet();

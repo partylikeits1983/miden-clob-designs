@@ -530,16 +530,33 @@ pub fn create_p2id_note(
     Ok(Note::new(vault, metadata, recipient))
 }
 
-pub async fn reset_store_sqlite() {
-    let path = "./store.sqlite3";
-    if tokio::fs::metadata(path).await.is_ok() {
-        if let Err(e) = tokio::fs::remove_file(path).await {
-            eprintln!("failed to remove {}: {}", path, e);
+pub async fn delete_keystore_and_store() {
+    // Remove the SQLite store file
+    let store_path = "./store.sqlite3";
+    if tokio::fs::metadata(store_path).await.is_ok() {
+        if let Err(e) = tokio::fs::remove_file(store_path).await {
+            eprintln!("failed to remove {}: {}", store_path, e);
         } else {
-            println!("cleared sqlite store: {}", path);
+            println!("cleared sqlite store: {}", store_path);
         }
     } else {
-        println!("store not found: {}", path);
+        println!("store not found: {}", store_path);
+    }
+
+    // Remove all files in the ./keystore directory
+    let keystore_dir = "./keystore";
+    match tokio::fs::read_dir(keystore_dir).await {
+        Ok(mut dir) => {
+            while let Ok(Some(entry)) = dir.next_entry().await {
+                let file_path = entry.path();
+                if let Err(e) = tokio::fs::remove_file(&file_path).await {
+                    eprintln!("failed to remove {}: {}", file_path.display(), e);
+                } else {
+                    println!("removed file: {}", file_path.display());
+                }
+            }
+        }
+        Err(e) => eprintln!("failed to read directory {}: {}", keystore_dir, e),
     }
 }
 

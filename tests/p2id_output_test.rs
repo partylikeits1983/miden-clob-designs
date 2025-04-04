@@ -17,13 +17,14 @@ use miden_client::{
 use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_p2id_note, reset_store_sqlite, wait_for_notes,
+    create_basic_account, create_basic_faucet, create_p2id_note, delete_keystore_and_store,
+    wait_for_notes,
 };
 
 #[tokio::test]
 async fn p2id_output_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(

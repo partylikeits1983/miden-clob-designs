@@ -17,11 +17,13 @@ use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 use miden_objects::crypto::hash::rpo::Rpo256;
 use miden_objects::vm::AdviceMap;
 
-use miden_clob_designs::common::{reset_store_sqlite, setup_accounts_and_faucets, wait_for_notes};
+use miden_clob_designs::common::{
+    delete_keystore_and_store, setup_accounts_and_faucets, wait_for_notes,
+};
 
 #[tokio::test]
 async fn hash_preimage_advice_provider() -> Result<(), ClientError> {
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(

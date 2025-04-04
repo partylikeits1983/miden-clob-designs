@@ -1,4 +1,4 @@
-use std::{env::set_current_dir, time::Instant};
+use std::time::Instant;
 
 use miden_client::{
     asset::FungibleAsset,
@@ -19,14 +19,14 @@ use miden_objects::vm::AdviceMap;
 
 use miden_clob_designs::common::{
     compute_partial_swapp, create_p2id_note, create_partial_swap_note,
-    create_partial_swap_note_cancellable, create_partial_swap_private_note, get_p2id_serial_num,
-    get_swapp_note, reset_store_sqlite, setup_accounts_and_faucets,
+    create_partial_swap_note_cancellable, create_partial_swap_private_note,
+    delete_keystore_and_store, get_p2id_serial_num, get_swapp_note, setup_accounts_and_faucets,
 };
 
 #[tokio::test]
 async fn swap_note_partial_consume_public_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let _endpoint = Endpoint::new(
@@ -199,7 +199,7 @@ async fn swap_note_partial_consume_public_test() -> Result<(), ClientError> {
 
 #[tokio::test]
 async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -370,7 +370,7 @@ async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
 
 #[tokio::test]
 async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientError> {
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -620,7 +620,7 @@ async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientEr
 
 #[tokio::test]
 async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientError> {
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -860,7 +860,7 @@ async fn partial_swap_chain_private_optimistic_benchmark() -> Result<(), ClientE
 
 #[tokio::test]
 async fn swap_note_instant_cancel_test() -> Result<(), ClientError> {
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(

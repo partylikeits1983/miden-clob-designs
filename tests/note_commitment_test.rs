@@ -14,12 +14,12 @@ use miden_client::{
 
 use miden_crypto::{hash::rpo::Rpo256 as Hasher, rand::FeltRng};
 
-use miden_clob_designs::common::{create_basic_account, reset_store_sqlite, wait_for_notes};
+use miden_clob_designs::common::{create_basic_account, delete_keystore_and_store, wait_for_notes};
 
 #[tokio::test]
 async fn note_input_commitment_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(

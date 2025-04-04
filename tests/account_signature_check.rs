@@ -11,7 +11,7 @@ use miden_client::{
 
 use miden_clob_designs::common::{
     create_basic_account, create_basic_faucet, create_library, create_signature_check_account,
-    generate_advice_stack_from_signature, reset_store_sqlite,
+    delete_keystore_and_store, generate_advice_stack_from_signature,
 };
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
@@ -20,7 +20,7 @@ use tokio::time::Instant;
 #[tokio::test]
 async fn account_signature_check() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -176,7 +176,7 @@ async fn account_signature_check() -> Result<(), ClientError> {
 #[tokio::test]
 async fn multi_signature_benchmark() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -346,7 +346,7 @@ async fn multi_signature_benchmark() -> Result<(), ClientError> {
 #[tokio::test]
 async fn multi_signature_benchmark_advice_provider() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -379,15 +379,22 @@ async fn multi_signature_benchmark_advice_provider() -> Result<(), ClientError> 
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Prepare Script With Public Keys");
 
+    let number_of_iterations = 10;
+
     // Read the account signature script template.
-    let script_code = fs::read_to_string(Path::new(
+    let code = fs::read_to_string(Path::new(
         "./masm/scripts/multi_sig_advice_provider_script.masm",
     ))
     .unwrap();
 
+    let script_code = code.replace(
+        "{NUMBER_OF_ITERATIONS}",
+        &(number_of_iterations - 1).to_string(),
+    );
+
     let mut keys = Vec::new();
 
-    let number_of_keys = 100;
+    let number_of_keys: usize = number_of_iterations;
     for i in 0..number_of_keys {
         let key = SecretKey::with_rng(client.rng());
         keys.push(key);
@@ -498,32 +505,13 @@ async fn multi_signature_benchmark_advice_provider() -> Result<(), ClientError> 
 
     client.sync_state().await.unwrap();
 
-    /*
-      let account = client
-          .get_account(signature_check_contract.id())
-          .await
-          .unwrap();
-      let index = 1;
-      let key = [Felt::new(0), Felt::new(0), Felt::new(0), Felt::new(0)];
-      println!(
-          "Mapping state\n Index: {:?}\n Key: {:?}\n Value: {:?}",
-          index,
-          key,
-          account
-              .unwrap()
-              .account()
-              .storage()
-              .get_map_item(index, key)
-      );
-    */
-
     Ok(())
 }
 
 #[tokio::test]
 async fn multi_signature_benchmark_advice_provider_100() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
-    reset_store_sqlite().await;
+    delete_keystore_and_store().await;
 
     // Initialize client
     let endpoint = Endpoint::new(
@@ -556,15 +544,22 @@ async fn multi_signature_benchmark_advice_provider_100() -> Result<(), ClientErr
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Prepare Script With Public Keys");
 
+    let number_of_iterations = 100;
+
     // Read the account signature script template.
-    let script_code = fs::read_to_string(Path::new(
+    let code = fs::read_to_string(Path::new(
         "./masm/scripts/multi_sig_advice_provider_script.masm",
     ))
     .unwrap();
 
+    let script_code = code.replace(
+        "{NUMBER_OF_ITERATIONS}",
+        &(number_of_iterations - 1).to_string(),
+    );
+
     // Generate 10 unique keys.
     let unique_keys = 10;
-    let total_keys = 100;
+    let total_keys = number_of_iterations;
     let mut unique_key_vec = Vec::with_capacity(unique_keys);
     for i in 0..unique_keys {
         let key = SecretKey::with_rng(client.rng());
