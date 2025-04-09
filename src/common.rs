@@ -139,13 +139,60 @@ pub async fn create_signature_check_account(
     let mut init_seed = [0_u8; 32];
     client.rng().fill_bytes(&mut init_seed);
 
-    let file_path = Path::new("./masm/accounts/account_signature_check.masm");
+    let file_path = Path::new("./masm/accounts/sig_check_update.masm");
     let account_code = fs::read_to_string(file_path).unwrap();
 
     let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
 
     let empty_storage_slot = StorageSlot::empty_value();
     let storage_map = StorageMap::new();
+    let storage_slot_map = StorageSlot::Map(storage_map.clone());
+
+    let account_component = AccountComponent::compile(
+        account_code.clone(),
+        assembler.clone(),
+        vec![empty_storage_slot, storage_slot_map],
+    )
+    .unwrap()
+    .with_supports_all_types();
+
+    let anchor_block = client.get_latest_epoch_block().await.unwrap();
+    let builder = AccountBuilder::new(init_seed)
+        .anchor((&anchor_block).try_into().unwrap())
+        .account_type(AccountType::RegularAccountUpdatableCode)
+        .storage_mode(AccountStorageMode::Public)
+        .with_component(BasicWallet)
+        .with_component(account_component);
+
+    let (account, seed) = builder.build().unwrap();
+    client.add_account(&account, Some(seed), false).await?;
+
+    Ok(account)
+}
+
+pub async fn create_multisig_poc(
+    client: &mut Client,
+    authed_pub_keys: Vec<Word>,
+) -> Result<miden_client::account::Account, ClientError> {
+    let mut init_seed = [0_u8; 32];
+    client.rng().fill_bytes(&mut init_seed);
+
+    let file_path = Path::new("./masm/accounts/sig_check_update.masm");
+    let account_code = fs::read_to_string(file_path).unwrap();
+
+    let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
+
+    let empty_storage_slot = StorageSlot::empty_value();
+    // Declare storage_map as mutable
+    let mut storage_map = StorageMap::new();
+
+    let true_value = [Felt::new(1), Felt::new(1), Felt::new(1), Felt::new(1)];
+
+    // Iterate over each key in the vector
+    for key in authed_pub_keys.iter() {
+        storage_map.insert(key.into(), true_value);
+    }
+
     let storage_slot_map = StorageSlot::Map(storage_map.clone());
 
     let account_component = AccountComponent::compile(

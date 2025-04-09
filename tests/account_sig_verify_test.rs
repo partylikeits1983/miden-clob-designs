@@ -57,10 +57,8 @@ async fn multi_signature_verify() -> Result<(), ClientError> {
     let number_of_iterations = 10;
 
     // Read the account signature script template.
-    let code = fs::read_to_string(Path::new(
-        "./masm/scripts/multi_sig_verify_script.masm",
-    ))
-    .unwrap();
+    let code =
+        fs::read_to_string(Path::new("./masm/scripts/multi_sig_verify_script.masm")).unwrap();
 
     let script_code = code.replace(
         "{NUMBER_OF_ITERATIONS}",
@@ -151,8 +149,6 @@ async fn multi_signature_verify() -> Result<(), ClientError> {
         .extend_advice_map(advice_map)
         .build()
         .unwrap();
-
-    
 
     // BEGIN TIMING PROOF GENERATION
     let start = Instant::now();

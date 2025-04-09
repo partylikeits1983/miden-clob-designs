@@ -1,0 +1,15 @@
+use.external_contract::signature_check_contract
+use.std::sys
+
+# AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
+begin
+    # push.{NUMBER_OF_ITERATIONS}
+    push.100
+
+    push.1111 debug.stack drop
+
+    call.signature_check_contract::verify_signatures_benchmark
+
+    dropw
+    exec.sys::truncate_stack
+end

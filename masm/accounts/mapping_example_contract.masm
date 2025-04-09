@@ -25,7 +25,7 @@ end
 export.get_value_in_map
     # The storage map is in storage slot 1
     push.1
-    # => [index]
+    # => [index, KEY]
 
     exec.account::get_map_item
     # => [VALUE]
