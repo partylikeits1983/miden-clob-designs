@@ -3,19 +3,16 @@ use std::{fs, path::Path, sync::Arc};
 use miden_client::{
     builder::ClientBuilder,
     crypto::SecretKey,
-    keystore::FilesystemKeyStore,
     rpc::{Endpoint, TonicRpcClient},
     transaction::{TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt, Word,
 };
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_library, create_multisig_poc,
-    create_signature_check_account, delete_keystore_and_store,
-    generate_advice_stack_from_signature,
+    create_library, create_multisig_poc,
+    delete_keystore_and_store,
 };
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
-use miden_objects::transaction::TransactionMeasurements;
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
 use tokio::time::Instant;
 

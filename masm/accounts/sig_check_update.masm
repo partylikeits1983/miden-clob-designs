@@ -653,79 +653,6 @@ export.verify.2560
     #=> [...]                                       (Cycles: 8)
 end
 
-# PUBLIC-KEY-HASH RECOVERY FROM SIGNATURE
-# =============================================================================================
-
-#!   Operand stack: []
-#!   Advice stack:  [tau0, tau1, h_0, ..., h_511, s2_0, ..., s2_511, pi_0, ..., pi_1022, ...]
-#! Outputs:
-#!   Operand stack: [PK_HASH]
-proc.falcon_recover_pub_key.16
-
-    push.6060 debug.stack drop
-    ## Load the evaluation point tau from the advice tape, compute its inverse and save both
-    ## Note that we will evaluate the polynomials at `tau_inv = tau^{-1}` as we are loading the coefficients
-    ## in the normal order i.e., not in reversed order required for Horner evaluation.
-    ## This means that the equality we will be checking is
-    ## pi(tau_inv) * tau^1023 == h(tau_inv) * tau^511 * s2(tau_inv) * tau^511
-    ##
-    ## which simplifies to
-    ##
-    ## pi(tau_inv) * tau == h(tau_inv) * s2(tau_inv)
-    adv_push.2
-    dup.1 dup.1 ext2inv
-    movup.3 movup.3
-    loc_storew.4
-    # => [tau1, tau0, tau_inv1, tau_inv0, Y, 0, 0, 0, 0, ptr, tau_inv_ptr, acc1, acc0, ...]
-
-    # Load the coefficients of the h polynomial and evaluate it at tau_inv
-    exec.eval_tau_inv
-    # => [Y, D, C, ptr, tau_inv_ptr, acc1, acc0, ...] where D is the digest expected to be PK hash
-
-    dropw
-    # => [D, C, ptr, tau_inv_ptr, acc1, acc0, ...]
-
-    repeat.4
-        swapw
-        dropw
-    end
-    # => [D]
-end
-
-#! Loads and evaluates s2 at tau_inv
-#! Inputs:
-#!   Operand stack: [tau1, tau0, tau_inv1, tau_inv0, Y, 0, 0, 0, 0, ptr, tau_inv_ptr, acc1, acc0, ...]
-#!   Advice stack:  [tau0, tau1, h_0, ..., h_511, s2_0, ..., s2_511, pi_0, ..., pi_1022, ...]
-#! Outputs:
-#!   Operand stack: [Y, D, C, ptr, tau_inv_ptr, acc1, acc0, ...] where D is the digest expected to be PK
-#!   Advice stack:  [h_0, ..., h_511, s2_0, ..., s2_511, pi_0, ..., pi_1022, ...]
-proc.eval_tau_inv
-    repeat.63
-        adv_pipe
-
-        # check that all coefficients are less than Falcon prime
-        dupw.1
-        u32assert2
-        u32overflowing_sub.M assert drop
-        u32overflowing_sub.M assert drop
-        u32assert2
-        u32overflowing_sub.M assert drop
-        u32overflowing_sub.M assert drop
-
-        dupw
-        u32assert2
-        u32overflowing_sub.M assert drop
-        u32overflowing_sub.M assert drop
-        u32assert2
-        u32overflowing_sub.M assert drop
-        u32overflowing_sub.M assert drop
-
-        horner_eval_base
-
-        hperm
-    end
-end
-
 # HELPERS
 # =============================================================================================
 
@@ -784,9 +711,8 @@ export.is_authenticated_public_key
     exec.account::get_map_item
     # => [VALUE]
 
-    push.3030 debug.stack drop
-
     push.1.1.1.1
+    # => [TRUE, VALUE]
 
     assert_eqw
 end
@@ -794,8 +720,6 @@ end
 # OS => [number_of_iterations]
 # AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
 export.verify_signatures_loop
-    push.101 debug.stack drop
-
     mem_store.NUM_ITERATIONS
 
     push.0
@@ -826,19 +750,17 @@ export.verify_signatures_loop
         # pub key @ mem addr 0
         # => [EMPTY_WORD, 0,0,0,8]
 
-        push.303 debug.stack drop
-
         dropw drop
         # => []
 
         mem_loadw.0
         # => [PUB_KEY]
 
+        push.303 debug.stack drop
+
         # will fail if not authed pub key
         exec.is_authenticated_public_key
         # => []
-
-        push.404 debug.stack drop
 
         dropw
         # => []
