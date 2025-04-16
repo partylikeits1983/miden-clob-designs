@@ -8,6 +8,8 @@ begin
 
     push.111 debug.stack drop
 
+    debug.mem.0.3
+
     call.signature_check_contract::verify_signatures_loop
 
     dropw

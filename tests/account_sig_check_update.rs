@@ -8,10 +8,7 @@ use miden_client::{
     ClientError, Felt, Word,
 };
 
-use miden_clob_designs::common::{
-    create_library, create_multisig_poc,
-    delete_keystore_and_store,
-};
+use miden_clob_designs::common::{create_library, create_multisig_poc, delete_keystore_and_store};
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
 use tokio::time::Instant;
@@ -92,14 +89,14 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     .unwrap();
 
     // -------------------------------------------------------------------------
-    // STEP 0: Create signature check smart contract
+    // STEP 2: Create signature check smart contract
     // -------------------------------------------------------------------------
     println!("\n[STEP 0] create a smart contract");
 
     let signature_check_contract = create_multisig_poc(&mut client, pub_keys).await.unwrap();
 
     // -------------------------------------------------------------------------
-    // STEP 2: Hash & Sign Data with Each Key and Populate the Advice Map
+    // STEP 3: Hash & Sign Data with Each Key and Populate the Advice Map
     // -------------------------------------------------------------------------
 
     // Prepare some data to hash.

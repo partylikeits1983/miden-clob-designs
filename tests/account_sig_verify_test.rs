@@ -6,7 +6,7 @@ use miden_client::{
     keystore::FilesystemKeyStore,
     rpc::{Endpoint, TonicRpcClient},
     transaction::{TransactionKernel, TransactionRequestBuilder},
-    ClientError, Felt, Word,
+    Client, ClientError, Felt, Word,
 };
 
 use miden_clob_designs::common::{
