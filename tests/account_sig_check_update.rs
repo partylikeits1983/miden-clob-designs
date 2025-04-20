@@ -8,10 +8,7 @@ use miden_client::{
     ClientError, Felt, Word,
 };
 
-use miden_clob_designs::common::{
-    create_library, create_multisig_poc,
-    delete_keystore_and_store,
-};
+use miden_clob_designs::common::{create_library, create_multisig_poc, delete_keystore_and_store};
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
 use tokio::time::Instant;
@@ -22,11 +19,14 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     delete_keystore_and_store().await;
 
     // Initialize client
+    /*
     let endpoint = Endpoint::new(
         "https".to_string(),
         "rpc.testnet.miden.io".to_string(),
         Some(443),
-    );
+    ); */
+    // let endpoint = Endpoint::localhost();
+    let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(57123));
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -99,7 +99,7 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     let signature_check_contract = create_multisig_poc(&mut client, pub_keys).await.unwrap();
 
     // -------------------------------------------------------------------------
-    // STEP 2: Hash & Sign Data with Each Key and Populate the Advice Map
+    // STEP 1: Hash & Sign Data with Each Key and Populate the Advice Map
     // -------------------------------------------------------------------------
 
     // Prepare some data to hash.
@@ -157,9 +157,15 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
         i += 1;
     }
 
-    let tx_increment_request = TransactionRequestBuilder::new()
+    client.sync_state().await.unwrap();
+
+    /*     let tx_increment_request = TransactionRequestBuilder::new()
+    .with_custom_script(tx_script)
+    .extend_advice_map(advice_map)
+    .build()
+    .unwrap(); */
+    let tx_increment_nonce = TransactionRequestBuilder::new()
         .with_custom_script(tx_script)
-        .extend_advice_map(advice_map)
         .build()
         .unwrap();
 
@@ -167,9 +173,11 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     let start = Instant::now();
 
     let tx_result = client
-        .new_transaction(signature_check_contract.id(), tx_increment_request)
+        .new_transaction(signature_check_contract.id(), tx_increment_nonce)
         .await
         .unwrap();
+
+    println!("tx result: {:?}", tx_result.account_delta());
 
     // Calculate the elapsed time for proof generation
     let duration = start.elapsed();

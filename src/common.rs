@@ -208,7 +208,7 @@ pub async fn create_multisig_poc(
         .anchor((&anchor_block).try_into().unwrap())
         .account_type(AccountType::RegularAccountUpdatableCode)
         .storage_mode(AccountStorageMode::Public)
-        .with_component(BasicWallet)
+        // .with_component(BasicWallet)
         .with_component(account_component);
 
     let (account, seed) = builder.build().unwrap();
