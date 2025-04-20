@@ -759,7 +759,7 @@ export.verify_signatures_loop
         # pub key @ mem addr 0
         # => [EMPTY_WORD, 0,0,0,8]
 
-        push.444 debug.stack debug.mem.0.3 drop
+        # push.444 debug.stack debug.mem.0.3 drop
 
         dropw drop
         # => []
@@ -767,7 +767,7 @@ export.verify_signatures_loop
         mem_loadw.0
         # => [PUB_KEY]
 
-        # push.303 debug.stack drop
+        push.303 debug.stack drop
 
         # will fail if not authed pub key
         exec.is_authenticated_public_key

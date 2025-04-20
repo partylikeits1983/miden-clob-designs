@@ -14,7 +14,6 @@ use miden_clob_designs::common::{
     delete_keystore_and_store, generate_advice_stack_from_signature,
 };
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
-use miden_objects::transaction::TransactionMeasurements;
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
 use tokio::time::Instant;
 

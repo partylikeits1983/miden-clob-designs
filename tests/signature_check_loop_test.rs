@@ -9,28 +9,24 @@ use miden_client::{
 };
 
 use miden_clob_designs::common::{create_library, create_multisig_poc, delete_keystore_and_store};
-<<<<<<< HEAD
-=======
-use miden_clob_designs::common::{create_library, create_multisig_poc, delete_keystore_and_store};
->>>>>>> 2a1f6af
 use miden_crypto::{dsa::rpo_falcon512::Polynomial, hash::rpo::Rpo256 as Hasher, FieldElement};
 use miden_objects::{assembly::Assembler, transaction::TransactionScript, vm::AdviceMap};
 use tokio::time::Instant;
 
 #[tokio::test]
-async fn updated_signature_check_test() -> Result<(), ClientError> {
+async fn signature_check_loop_test() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
     delete_keystore_and_store().await;
 
     // Initialize client
-    /*
-    let endpoint = Endpoint::new(
+    /*     let endpoint = Endpoint::new(
         "https".to_string(),
         "rpc.testnet.miden.io".to_string(),
         Some(443),
-    ); */
+    );  
+    */
     // let endpoint = Endpoint::localhost();
-    let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(57123));
+    let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(57291));
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -53,7 +49,7 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
 
     // Read the account signature script template.
     let code =
-        fs::read_to_string(Path::new("./masm/scripts/updated_multisig_script.masm")).unwrap();
+        fs::read_to_string(Path::new("./masm/scripts/signature_check_loop_script.masm")).unwrap();
 
     let script_code = code.replace(
         "{NUMBER_OF_ITERATIONS}",
@@ -78,7 +74,7 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     println!("Final script:\n{}", script_code);
 
     let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
-    let file_path = Path::new("./masm/accounts/sig_check_update.masm");
+    let file_path = Path::new("./masm/accounts/signature_check_loop.masm");
     let account_code = fs::read_to_string(file_path).unwrap();
 
     let account_component_lib = create_library(
@@ -103,11 +99,7 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     let signature_check_contract = create_multisig_poc(&mut client, pub_keys).await.unwrap();
 
     // -------------------------------------------------------------------------
-<<<<<<< HEAD
     // STEP 1: Hash & Sign Data with Each Key and Populate the Advice Map
-=======
-    // STEP 3: Hash & Sign Data with Each Key and Populate the Advice Map
->>>>>>> 2a1f6af
     // -------------------------------------------------------------------------
 
     // Prepare some data to hash.
@@ -167,13 +159,9 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
 
     client.sync_state().await.unwrap();
 
-    /*     let tx_increment_request = TransactionRequestBuilder::new()
-    .with_custom_script(tx_script)
-    .extend_advice_map(advice_map)
-    .build()
-    .unwrap(); */
-    let tx_increment_nonce = TransactionRequestBuilder::new()
+    let tx_increment_request = TransactionRequestBuilder::new()
         .with_custom_script(tx_script)
+        .extend_advice_map(advice_map)
         .build()
         .unwrap();
 
@@ -181,7 +169,7 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     let start = Instant::now();
 
     let tx_result = client
-        .new_transaction(signature_check_contract.id(), tx_increment_nonce)
+        .new_transaction(signature_check_contract.id(), tx_increment_request)
         .await
         .unwrap();
 
@@ -222,6 +210,12 @@ async fn updated_signature_check_test() -> Result<(), ClientError> {
     );
 
     client.sync_state().await.unwrap();
+
+    let new_account_state = client.get_account(signature_check_contract.id()).await.unwrap();
+
+    if let Some(account) = &new_account_state {
+        println!("new account state: {:?}", account.account().storage().get_item(0));
+    }
 
     Ok(())
 }

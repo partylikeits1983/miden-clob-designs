@@ -177,7 +177,7 @@ pub async fn create_multisig_poc(
     let mut init_seed = [0_u8; 32];
     client.rng().fill_bytes(&mut init_seed);
 
-    let file_path = Path::new("./masm/accounts/sig_check_update.masm");
+    let file_path = Path::new("./masm/accounts/signature_check_loop.masm");
     let account_code = fs::read_to_string(file_path).unwrap();
 
     let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
@@ -204,6 +204,7 @@ pub async fn create_multisig_poc(
     .with_supports_all_types();
 
     let anchor_block = client.get_latest_epoch_block().await.unwrap();
+    // let anchor_block = client.get_epoch_block(10.into()).await.unwrap();
     let builder = AccountBuilder::new(init_seed)
         .anchor((&anchor_block).try_into().unwrap())
         .account_type(AccountType::RegularAccountUpdatableCode)

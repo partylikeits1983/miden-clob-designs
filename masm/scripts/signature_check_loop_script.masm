@@ -8,8 +8,8 @@ begin
 
     push.111 debug.stack drop
 
-    # call.signature_check_contract::verify_signatures_loop
-    call.signature_check_contract::increment_nonce_test
+    call.signature_check_contract::verify_signatures_loop
+    # call.signature_check_contract::increment_nonce_test
 
     dropw
     exec.sys::truncate_stack
