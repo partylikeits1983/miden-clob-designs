@@ -7,7 +7,6 @@ use.std::sys
 
 # CONSTANTS
 # =================================================================================================
-
 const.NUM_ITERATIONS=100
 const.ITERATION=104
 
@@ -730,6 +729,8 @@ export.verify_signatures_loop
     mem_store.ITERATION
     # => []
 
+    debug.mem.0.3
+
     push.1
     while.true
         mem_load.ITERATION
@@ -746,13 +747,19 @@ export.verify_signatures_loop
         adv_pipe
         # => [MSG, PK, 0,0,0,8]
 
+        debug.mem.0.3
+
         swapw
         # => [PK, MSG]
+
+        push.333 debug.stack debug.mem.0.3 drop
 
         # call verify
         exec.verify
         # pub key @ mem addr 0
         # => [EMPTY_WORD, 0,0,0,8]
+
+        push.444 debug.stack debug.mem.0.3 drop
 
         dropw drop
         # => []

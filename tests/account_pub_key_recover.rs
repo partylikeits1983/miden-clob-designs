@@ -100,7 +100,6 @@ async fn account_signature_check() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     // STEP 3: hash & sign data
     // -------------------------------------------------------------------------
-
     let mut data = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
     data.splice(0..0, Word::default().iter().cloned());
     let hashed_data = Hasher::hash_elements(&data);
