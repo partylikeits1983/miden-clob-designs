@@ -10,8 +10,11 @@ begin
 
     debug.mem.0.3
 
-    call.signature_check_contract::verify_signatures_loop
+    # call.signature_check_contract::verify_signatures_loop
+    call.signature_check_contract::increment_nonce_test
 
     dropw
     exec.sys::truncate_stack
+
+    push.4040 debug.stack drop
 end

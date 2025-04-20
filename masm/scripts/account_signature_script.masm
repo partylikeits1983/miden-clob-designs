@@ -2,6 +2,8 @@ use.external_contract::signature_check_contract
 use.std::sys
 
 begin
+
+    push.111 debug.stack drop
     push.{PUB_KEY}
 
     dupw mem_storew.0

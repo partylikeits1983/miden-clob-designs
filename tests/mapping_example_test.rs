@@ -23,11 +23,13 @@ async fn mapping_example_test() -> Result<(), ClientError> {
     delete_keystore_and_store().await;
 
     // Initialize client
-    let endpoint = Endpoint::new(
+    /*     let endpoint = Endpoint::new(
         "https".to_string(),
         "rpc.testnet.miden.io".to_string(),
         Some(443),
-    );
+    ); */
+    let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(57123));
+
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -37,6 +39,8 @@ async fn mapping_example_test() -> Result<(), ClientError> {
         .in_debug_mode(true)
         .build()
         .await?;
+
+    // let mut client = Client::new().with_testnet_rpc().in_debug_mode(true);
 
     let sync_summary = client.sync_state().await.unwrap();
     println!("Latest block: {}", sync_summary.block_num);
@@ -132,6 +136,12 @@ async fn mapping_example_test() -> Result<(), ClientError> {
         "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_id
     );
+
+    let cycles = tx_result
+        .executed_transaction()
+        .measurements()
+        .total_cycles();
+    println!("cycles: {:?}", cycles);
 
     // Submit transaction to the network
     let _ = client.submit_transaction(tx_result).await;

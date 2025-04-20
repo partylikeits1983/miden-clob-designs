@@ -719,6 +719,8 @@ end
 # OS => [number_of_iterations]
 # AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
 export.verify_signatures_loop
+    push.222 debug.stack drop
+
     mem_store.NUM_ITERATIONS
 
     push.0
@@ -740,7 +742,7 @@ export.verify_signatures_loop
         adv.push_mapval
         # => [KEY]
 
-        debug.mem.0.3
+        push.333 debug.stack debug.mem.0.3 drop
 
         adv_pipe
         # => [MSG, PK, 0,0,0,8]
@@ -765,7 +767,7 @@ export.verify_signatures_loop
         mem_loadw.0
         # => [PUB_KEY]
 
-        push.303 debug.stack drop
+        # push.303 debug.stack drop
 
         # will fail if not authed pub key
         exec.is_authenticated_public_key
@@ -798,4 +800,9 @@ export.verify_signatures_loop
 
     exec.sys::truncate_stack
     # => []
+end
+
+export.increment_nonce_test
+    push.1 exec.account::incr_nonce
+    exec.sys::truncate_stack
 end
