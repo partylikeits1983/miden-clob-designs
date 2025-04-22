@@ -139,7 +139,7 @@ pub async fn create_signature_check_account(
     let mut init_seed = [0_u8; 32];
     client.rng().fill_bytes(&mut init_seed);
 
-    let file_path = Path::new("./masm/accounts/sig_check_update.masm");
+    let file_path = Path::new("./masm/accounts/account_signature_check.masm");
     let account_code = fs::read_to_string(file_path).unwrap();
 
     let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);

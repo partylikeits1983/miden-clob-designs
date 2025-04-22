@@ -4,7 +4,7 @@ use.std::sys
 # AS map => {0: SIG_0, 1: SIG_1, n: SIG_N}
 begin
     # push.{NUMBER_OF_ITERATIONS}
-    push.4
+    push.24
 
     push.111 debug.stack drop
 

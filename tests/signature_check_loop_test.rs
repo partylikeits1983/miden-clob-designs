@@ -19,14 +19,14 @@ async fn signature_check_loop_test() -> Result<(), ClientError> {
     delete_keystore_and_store().await;
 
     // Initialize client
-    /*     let endpoint = Endpoint::new(
+    let endpoint = Endpoint::new(
         "https".to_string(),
         "rpc.testnet.miden.io".to_string(),
         Some(443),
-    );  
-    */
+    );
+
     // let endpoint = Endpoint::localhost();
-    let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(57291));
+    // let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(57291));
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -45,7 +45,7 @@ async fn signature_check_loop_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     println!("\n[STEP 1] Prepare Script With Public Keys");
 
-    let number_of_iterations = 5;
+    let number_of_iterations = 25;
 
     // Read the account signature script template.
     let code =
@@ -211,10 +211,16 @@ async fn signature_check_loop_test() -> Result<(), ClientError> {
 
     client.sync_state().await.unwrap();
 
-    let new_account_state = client.get_account(signature_check_contract.id()).await.unwrap();
+    let new_account_state = client
+        .get_account(signature_check_contract.id())
+        .await
+        .unwrap();
 
     if let Some(account) = &new_account_state {
-        println!("new account state: {:?}", account.account().storage().get_item(0));
+        println!(
+            "new account state: {:?}",
+            account.account().storage().get_item(0)
+        );
     }
 
     Ok(())

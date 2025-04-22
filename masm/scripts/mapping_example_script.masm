@@ -2,6 +2,12 @@ use.miden_by_example::mapping_example_contract
 use.std::sys
 
 begin
+
+    push.0.0.0.0
+    adv.push_mapval adv_loadw 
+
+    push.111 debug.stack drop
+
     push.1.2.3.4
     push.0.0.0.0
     # => [KEY, VALUE]
