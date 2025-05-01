@@ -33,7 +33,6 @@ use miden_objects::{
 };
 
 // Signature verification code:
-
 const N: usize = 512;
 fn mul_modulo_p(a: Polynomial<Felt>, b: Polynomial<Felt>) -> [u64; 1024] {
     let mut c = [0; 2 * N];

@@ -1,3 +1,4 @@
 /target
 store.sqlite3
 keystore
+.DS_Store
