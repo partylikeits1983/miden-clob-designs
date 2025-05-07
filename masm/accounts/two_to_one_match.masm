@@ -1,0 +1,7 @@
+use.miden::contracts::wallets::basic->wallet
+use.miden::account
+
+export.settle_liquidity
+    push.111 debug.stack drop
+    push.1 exec.account::incr_nonce
+end

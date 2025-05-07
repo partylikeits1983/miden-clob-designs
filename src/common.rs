@@ -18,19 +18,25 @@ use miden_client::{
     },
     asset::{Asset, FungibleAsset, TokenSymbol},
     auth::AuthSecretKey,
+    builder::ClientBuilder,
     crypto::{FeltRng, SecretKey},
     keystore::FilesystemKeyStore,
     note::{
         build_swap_tag, Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteId, NoteInputs,
-        NoteMetadata, NoteRecipient, NoteScript, NoteTag, NoteType,
+        NoteMetadata, NoteRecipient, NoteRelevance, NoteScript, NoteTag, NoteType,
     },
-    transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder},
+    rpc::{Endpoint, TonicRpcClient},
+    store::InputNoteRecord,
+    transaction::{OutputNote, TransactionKernel, TransactionRequestBuilder, TransactionScript},
     Client, ClientError, Felt, Word,
 };
+use miden_lib::note::utils;
 use miden_objects::{
     account::{AccountComponent, StorageMap},
+    assembly::Library,
     Hasher, NoteError,
 };
+use serde::de::value::Error;
 
 // Signature verification code:
 const N: usize = 512;
@@ -301,6 +307,55 @@ pub async fn setup_accounts_and_faucets(
     }
 
     Ok((accounts, faucets))
+}
+
+pub async fn mint_from_faucet_for_matcher(
+    client: &mut Client,
+    account: &Account,
+    faucet: &Account,
+    amount: u64,
+) -> Result<(), ClientError> {
+    if amount == 0 {
+        return Ok(());
+    }
+
+    let asset = FungibleAsset::new(faucet.id(), amount).unwrap();
+    let mint_req = TransactionRequestBuilder::mint_fungible_asset(
+        asset,
+        account.id(),
+        NoteType::Public,
+        client.rng(),
+    )?
+    .build()?;
+    let mint_exec = client.new_transaction(faucet.id(), mint_req).await?;
+    client.submit_transaction(mint_exec.clone()).await?;
+
+    let minted_note = match mint_exec.created_notes().get_note(0) {
+        OutputNote::Full(note) => note.clone(),
+        _ => panic!("Expected full minted note"),
+    };
+
+    wait_for_notes(client, account, 1).await?;
+    client.sync_state().await?;
+
+    let script_code = fs::read_to_string(Path::new("./masm/scripts/match_script.masm")).unwrap();
+    let matcher_code =
+        fs::read_to_string(Path::new("./masm/accounts/two_to_one_match.masm")).unwrap();
+    let matcher_library =
+        create_library_simplified(matcher_code, "external_contract::matcher_contract").unwrap();
+
+    let tx_script = create_tx_script(script_code, Some(matcher_library)).unwrap();
+
+    let consume_req = TransactionRequestBuilder::new()
+        .with_authenticated_input_notes([(minted_note.id(), None)])
+        .with_custom_script(tx_script)
+        .build()?;
+
+    let consume_exec = client.new_transaction(account.id(), consume_req).await?;
+    client.submit_transaction(consume_exec).await?;
+    client.sync_state().await?;
+
+    Ok(())
 }
 
 pub async fn wait_for_notes(
@@ -734,4 +789,184 @@ pub fn compute_partial_swapp(
         new_offered_asset_amount,
         new_requested_asset_amount,
     )
+}
+
+// Helper to instantiate Client
+pub async fn instantiate_client(endpoint: Endpoint) -> Result<Client, ClientError> {
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let client = ClientBuilder::new()
+        .with_rpc(rpc_api.clone())
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    Ok(client)
+}
+
+// Contract builder helper function
+pub async fn create_public_immutable_contract(
+    account_code: &String,
+) -> Result<(Account, Word), ClientError> {
+    let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
+
+    let counter_component = AccountComponent::compile(
+        account_code.clone(),
+        assembler.clone(),
+        vec![StorageSlot::Value([
+            Felt::new(0),
+            Felt::new(0),
+            Felt::new(0),
+            Felt::new(0),
+        ])],
+    )
+    .unwrap()
+    .with_supports_all_types();
+
+    // @dev this is bad that I need to get an anchor block to create a contract
+    let endpoint = Endpoint::localhost();
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api.clone())
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+    let anchor_block = client.get_latest_epoch_block().await.unwrap();
+
+    let mut init_seed = [0_u8; 32];
+    client.rng().fill_bytes(&mut init_seed);
+
+    let (counter_contract, counter_seed) = AccountBuilder::new(init_seed)
+        .anchor((&anchor_block).try_into().unwrap())
+        .account_type(AccountType::RegularAccountImmutableCode)
+        .storage_mode(AccountStorageMode::Public)
+        .with_component(counter_component.clone())
+        .with_component(BasicWallet)
+        .build()
+        .unwrap();
+
+    Ok((counter_contract, counter_seed))
+}
+
+// Creates public note
+pub async fn create_public_note(
+    client: &mut Client,
+    note_code: String,
+    account_library: Library,
+    creator_account: Account,
+    assets: NoteAssets,
+) -> Result<Note, Error> {
+    let assembler = TransactionKernel::assembler()
+        .with_library(&account_library)
+        .unwrap()
+        .with_debug_mode(true);
+    let rng = client.rng();
+    let serial_num = rng.draw_word();
+    let note_script = NoteScript::compile(note_code, assembler.clone()).unwrap();
+    let note_inputs = NoteInputs::new([].to_vec()).unwrap();
+    let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
+    let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
+    let metadata = NoteMetadata::new(
+        creator_account.id(),
+        NoteType::Public,
+        tag,
+        NoteExecutionHint::always(),
+        Felt::new(0),
+    )
+    .unwrap();
+
+    let note = Note::new(assets, metadata, recipient);
+
+    let note_req = TransactionRequestBuilder::new()
+        .with_own_output_notes(vec![OutputNote::Full(note.clone())])
+        .build()
+        .unwrap();
+    let tx_result = client
+        .new_transaction(creator_account.id(), note_req)
+        .await
+        .unwrap();
+
+    let _ = client.submit_transaction(tx_result).await;
+    client.sync_state().await.unwrap();
+
+    Ok(note)
+}
+
+// Waits for note
+pub async fn wait_for_note(
+    client: &mut Client,
+    account_id: &Account,
+    expected: &Note,
+) -> Result<(), ClientError> {
+    loop {
+        client.sync_state().await?;
+
+        let notes: Vec<(InputNoteRecord, Vec<(AccountId, NoteRelevance)>)> =
+            client.get_consumable_notes(Some(account_id.id())).await?;
+
+        let found = notes.iter().any(|(rec, _)| rec.id() == expected.id());
+
+        if found {
+            println!("✅ note found {}", expected.id().to_hex());
+            break;
+        }
+
+        println!("Note {} not found. Waiting...", expected.id().to_hex());
+        sleep(Duration::from_secs(3)).await;
+    }
+    Ok(())
+}
+
+pub fn create_tx_script(
+    script_code: String,
+    library: Option<Library>,
+) -> Result<TransactionScript, Error> {
+    let assembler = TransactionKernel::assembler();
+
+    let assembler = match library {
+        Some(lib) => assembler.with_library(lib),
+        None => Ok(assembler.with_debug_mode(true)),
+    }
+    .unwrap();
+    let tx_script = TransactionScript::compile(script_code, [], assembler).unwrap();
+
+    Ok(tx_script)
+}
+
+// Creates library
+pub fn create_library_simplified(
+    account_code: String,
+    library_path: &str,
+) -> Result<miden_assembly::Library, Box<dyn std::error::Error>> {
+    let assembler: Assembler = TransactionKernel::assembler().with_debug_mode(true);
+    let source_manager = Arc::new(DefaultSourceManager::default());
+    let module = Module::parser(ModuleKind::Library).parse_str(
+        LibraryPath::new(library_path)?,
+        account_code,
+        &source_manager,
+    )?;
+    let library = assembler.clone().assemble_library([module])?;
+    Ok(library)
+}
+
+pub fn create_exact_p2id_note(
+    sender: AccountId,
+    target: AccountId,
+    assets: Vec<Asset>,
+    note_type: NoteType,
+    aux: Felt,
+    serial_num: Word,
+) -> Result<Note, NoteError> {
+    let recipient = utils::build_p2id_recipient(target, serial_num)?;
+
+    let tag = NoteTag::from_account_id(target, NoteExecutionMode::Local)?;
+
+    let metadata = NoteMetadata::new(sender, note_type, tag, NoteExecutionHint::always(), aux)?;
+    let vault = NoteAssets::new(assets)?;
+
+    Ok(Note::new(vault, metadata, recipient))
 }

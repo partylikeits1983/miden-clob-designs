@@ -4,7 +4,7 @@ use.std::sys
 begin
 
     push.0.0.0.0
-    adv.push_mapval adv_loadw 
+    adv.push_mapval adv_loadw
 
     push.111 debug.stack drop
 

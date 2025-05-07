@@ -1,0 +1,5 @@
+use.external_contract::matcher_contract
+begin
+    push.101 debug.stack drop
+    exec.matcher_contract::settle_liquidity
+end
