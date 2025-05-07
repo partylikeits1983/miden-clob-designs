@@ -1,24 +1,19 @@
 use miden_client::{
     asset::FungibleAsset,
     keystore::FilesystemKeyStore,
-    note::{NoteAssets, NoteType},
+    note::NoteType,
     rpc::Endpoint,
     transaction::{OutputNote, TransactionRequestBuilder},
     ClientError, Felt,
 };
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, create_exact_p2id_note, create_library_simplified,
-    create_public_immutable_contract, create_public_note, create_tx_script,
-    delete_keystore_and_store, instantiate_client, mint_from_faucet_for_matcher,
-    setup_accounts_and_faucets, wait_for_note,
+    create_exact_p2id_note, delete_keystore_and_store, instantiate_client,
+    setup_accounts_and_faucets,
 };
-use miden_crypto::Word;
-use miden_lib::note::{create_p2id_note, create_swap_note};
-use std::{fs, path::Path};
-use tokio::time::{sleep, Duration};
+use miden_lib::note::create_swap_note;
 
 #[tokio::test]
-async fn increment_counter_with_note() -> Result<(), ClientError> {
+async fn fill_counter_party_swap_notes() -> Result<(), ClientError> {
     delete_keystore_and_store().await;
 
     let endpoint = Endpoint::testnet();
@@ -135,9 +130,6 @@ async fn increment_counter_with_note() -> Result<(), ClientError> {
     let _ = client.submit_transaction(tx_result).await;
 
     client.sync_state().await.unwrap();
-
-
-    
 
     Ok(())
 }

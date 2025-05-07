@@ -7,7 +7,6 @@ use miden_client::{
     transaction::{TransactionKernel, TransactionRequestBuilder},
     ClientError, Felt,
 };
-use miden_crypto::Word;
 use rand::RngCore;
 
 use miden_objects::{

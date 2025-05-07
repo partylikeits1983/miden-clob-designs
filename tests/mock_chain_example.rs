@@ -1,5 +1,5 @@
 use miden_crypto::ONE;
-use miden_tx::{testing::TransactionContextBuilder, TransactionInputs};
+use miden_tx::testing::TransactionContextBuilder;
 
 #[tokio::test]
 async fn mockchain_test() {

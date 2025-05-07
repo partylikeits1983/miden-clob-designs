@@ -338,13 +338,13 @@ pub async fn mint_from_faucet_for_matcher(
     wait_for_notes(client, account, 1).await?;
     client.sync_state().await?;
 
-    let script_code = fs::read_to_string(Path::new("./masm/scripts/match_script.masm")).unwrap();
-    let matcher_code =
-        fs::read_to_string(Path::new("./masm/accounts/two_to_one_match.masm")).unwrap();
-    let matcher_library =
-        create_library_simplified(matcher_code, "external_contract::matcher_contract").unwrap();
+    // let script_code = fs::read_to_string(Path::new("./masm/scripts/match_script.masm")).unwrap();
+    // let matcher_code =
+    //    fs::read_to_string(Path::new("./masm/accounts/two_to_one_match.masm")).unwrap();
+    // let matcher_library =
+    //    create_library_simplified(matcher_code, "external_contract::matcher_contract").unwrap();
 
-    let tx_script = create_tx_script(script_code, Some(matcher_library)).unwrap();
+    // let tx_script = create_tx_script(script_code, Some(matcher_library)).unwrap();
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(minted_note.id(), None)])
