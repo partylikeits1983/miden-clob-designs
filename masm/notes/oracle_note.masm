@@ -1,0 +1,31 @@
+use.miden::tx
+use.miden::note
+use.miden::contracts::wallets::basic->wallet
+
+begin
+
+    push.0xb86237a8c9cd35acfef457e47282cc4da43df676df410c988eab93095d8fb3b9
+
+    push.599064613630720
+    push.5721796415433354752
+
+    exec.tx::execute_foreign_procedure
+    # => [count]
+
+    debug.stack
+    # => [count]
+
+    push.0 exec.note::get_assets
+    # => [num_assets, dest_ptr]
+
+    drop
+    # => [dest_ptr]
+
+    # Load asset from memory
+    mem_loadw
+    # => [ASSET]
+
+    # Call receive asset in wallet
+    call.wallet::receive_asset
+
+end
