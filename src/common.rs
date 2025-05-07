@@ -348,7 +348,7 @@ pub async fn mint_from_faucet_for_matcher(
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(minted_note.id(), None)])
-        .with_custom_script(tx_script)
+        // .with_custom_script(tx_script)
         .build()?;
 
     let consume_exec = client.new_transaction(account.id(), consume_req).await?;

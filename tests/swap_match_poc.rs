@@ -29,47 +29,27 @@ async fn increment_counter_with_note() -> Result<(), ClientError> {
     println!("Latest block: {}", sync_summary.block_num);
 
     // -------------------------------------------------------------------------
-    // STEP 1: Create Basic User Account
+    // STEP 1: Create Accounts (Alice, Bob, Matcher Account)
     // -------------------------------------------------------------------------
     // Setup accounts and balances
     let balances = vec![
-        vec![200, 0], // For account[0] => Alice
-        vec![0, 200],
+        vec![100, 0],   // For account[0] => Alice
+        vec![0, 100],   // For account[0] => Bob
+        vec![100, 100], // For account[0] => matcher
     ];
     let (accounts, faucets) =
-        setup_accounts_and_faucets(&mut client, keystore, 2, 2, balances).await?;
+        setup_accounts_and_faucets(&mut client, keystore, 3, 2, balances).await?;
 
     // rename for clarity
     let alice_account = accounts[0].clone();
     let bob_account = accounts[1].clone();
+    let matcher_account = accounts[2].clone();
     let faucet_a = faucets[0].clone();
     let faucet_b = faucets[1].clone();
 
     // -------------------------------------------------------------------------
-    // STEP 2: Create Matcher Smart Contract
+    // STEP 2: Create the SWAP Notes & Expected P2ID output notes
     // -------------------------------------------------------------------------
-    let matcher_code =
-        fs::read_to_string(Path::new("./masm/accounts/two_to_one_match.masm")).unwrap();
-
-    let (matcher_contract, matcher_seed) = create_public_immutable_contract(&matcher_code).await?;
-    println!("contract id: {:?}", matcher_contract.id().to_hex());
-
-    client
-        .add_account(&matcher_contract, Some(matcher_seed), false)
-        .await
-        .unwrap();
-
-    mint_from_faucet_for_matcher(&mut client, &matcher_contract, &faucet_a, 100)
-        .await
-        .unwrap();
-    mint_from_faucet_for_matcher(&mut client, &matcher_contract, &faucet_b, 100)
-        .await
-        .unwrap();
-
-    // -------------------------------------------------------------------------
-    // STEP 3: Prepare & Create the Note
-    // -------------------------------------------------------------------------
-
     let asset_a = FungibleAsset::new(faucet_a.id(), 100).unwrap();
     let asset_b = FungibleAsset::new(faucet_b.id(), 100).unwrap();
 
@@ -113,7 +93,7 @@ async fn increment_counter_with_note() -> Result<(), ClientError> {
     client.submit_transaction(tx_result).await.unwrap();
 
     let p2id_1 = create_exact_p2id_note(
-        matcher_contract.id(),
+        matcher_account.id(),
         alice_account.id(),
         vec![asset_b.into()],
         NoteType::Public,
@@ -123,7 +103,7 @@ async fn increment_counter_with_note() -> Result<(), ClientError> {
     .unwrap();
 
     let p2id_2 = create_exact_p2id_note(
-        matcher_contract.id(),
+        matcher_account.id(),
         bob_account.id(),
         vec![asset_a.into()],
         NoteType::Public,
@@ -132,33 +112,32 @@ async fn increment_counter_with_note() -> Result<(), ClientError> {
     )
     .unwrap();
 
-    // -------------------------------------------------------------------------
-    // STEP 4: Consume the Note
-    // -------------------------------------------------------------------------
-    // wait_for_note(&mut client, &matcher_contract, &swap_note_1).await?;
-    // wait_for_note(&mut client, &matcher_contract, &swap_note_2).await?;
-
-    let script_code = fs::read_to_string(Path::new("./masm/scripts/match_script.masm")).unwrap();
-    let matcher_library =
-        create_library_simplified(matcher_code, "external_contract::matcher_contract").unwrap();
-
-    let tx_script = create_tx_script(script_code, Some(matcher_library)).unwrap();
-
+    // ---------------------------------------------------------------------------------
+    // STEP 3: Consume both SWAP notes in a single TX by the matcher & output p2id notes
+    // ---------------------------------------------------------------------------------
     let consume_custom_req = TransactionRequestBuilder::new()
-        .with_authenticated_input_notes([(swap_note_1.id(), None), (swap_note_1.id(), None)])
-        .with_own_output_notes(vec![
-            OutputNote::Full(p2id_1.clone()),
-            OutputNote::Full(p2id_2.clone()),
+        // .with_authenticated_input_notes([(swap_note_1.id(), None), (swap_note_1.id(), None)])
+        .with_unauthenticated_input_notes([
+            (swap_note_1.clone(), None),
+            (swap_note_2.clone(), None),
         ])
-        .with_custom_script(tx_script)
+        .with_expected_future_notes(vec![
+            (p2id_1.clone().into(), p2id_1.metadata().tag()),
+            (p2id_2.clone().into(), p2id_2.metadata().tag()),
+        ])
         .build()
         .unwrap();
 
     let tx_result = client
-        .new_transaction(matcher_contract.id(), consume_custom_req)
+        .new_transaction(matcher_account.id(), consume_custom_req)
         .await
         .unwrap();
     let _ = client.submit_transaction(tx_result).await;
+
+    client.sync_state().await.unwrap();
+
+
+    
 
     Ok(())
 }
