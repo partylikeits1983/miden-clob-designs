@@ -34,4 +34,6 @@ begin
     # Call receive asset in wallet
     call.wallet::receive_asset
 
+    dropw dropw
+
 end

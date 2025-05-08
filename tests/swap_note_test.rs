@@ -1,4 +1,4 @@
-use std::{env::set_current_dir, time::Instant};
+use std::time::Instant;
 
 use miden_client::{
     asset::FungibleAsset,

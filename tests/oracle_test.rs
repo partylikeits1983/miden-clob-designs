@@ -230,22 +230,7 @@ async fn oracle_test_note() -> Result<(), ClientError> {
     client.sync_state().await?;
 
     let oracle_account_id = AccountId::from_hex("0x4f67e78643022e00000220d8997e33").unwrap();
-    client
-        .import_account_by_id(oracle_account_id)
-        .await
-        .unwrap();
-
-    println!(
-        "prefix: {:?} suffix: {:?}",
-        oracle_account_id.prefix(),
-        oracle_account_id.suffix()
-    );
-
-    let publisher_account_id = AccountId::from_hex("0x0db5afa7f28ba90000029f98301f46").unwrap();
-    client
-        .import_account_by_id(publisher_account_id)
-        .await
-        .unwrap();
+    let foreign_accounts = get_oracle_foreign_accounts(&mut client, oracle_account_id).await?;
 
     // -------------------------------------------------------------------------
     // STEP 2: Mint tokens with P2ID
@@ -329,27 +314,10 @@ async fn oracle_test_note() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     // STEP 4: Consume the Custom Note
     // -------------------------------------------------------------------------
-    let oracle_foreign_account =
-        ForeignAccount::public(oracle_account_id, AccountStorageRequirements::default()).unwrap();
-
-    let publisher_foreign_account = ForeignAccount::public(
-        publisher_account_id,
-        AccountStorageRequirements::new([(
-            1u8,
-            &[StorageMapKey::from([
-                ZERO,
-                ZERO,
-                ZERO,
-                Felt::new(120195681),
-            ])],
-        )]),
-    )
-    .unwrap();
-
     wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
     let consume_custom_req = TransactionRequestBuilder::new()
-        .with_foreign_accounts([publisher_foreign_account, oracle_foreign_account])
+        .with_foreign_accounts(foreign_accounts)
         .with_authenticated_input_notes([(custom_note.id(), None)])
         .build()
         .unwrap();
