@@ -19,7 +19,7 @@ use miden_client::{
     transaction::{
         ForeignAccount, OutputNote, TransactionKernel, TransactionRequestBuilder, TransactionScript,
     },
-    ClientError, Felt, Word, ZERO,
+    Client, ClientError, Felt, Word, ZERO,
 };
 
 use miden_crypto::rand::FeltRng;
@@ -29,21 +29,67 @@ use miden_clob_designs::common::{
     wait_for_notes,
 };
 
+/// Import the oracle + its publishers and return the ForeignAccount list
+pub async fn get_oracle_foreign_accounts(
+    client: &mut Client,
+    oracle_account_id: AccountId,
+) -> Result<Vec<ForeignAccount>, ClientError> {
+    client.import_account_by_id(oracle_account_id).await?;
+
+    let oracle_record = client
+        .get_account(oracle_account_id)
+        .await
+        .expect("RPC failed")
+        .expect("oracle account not found");
+
+    let storage = oracle_record.account().storage();
+    let publisher_count = storage.get_item(1).unwrap()[0].as_int();
+
+    // collect publisher ids
+    let publisher_ids: Vec<AccountId> = (1..publisher_count.saturating_sub(1))
+        .map(|i| {
+            let digest = storage.get_item(2 + i as u8).unwrap();
+            let words: Word = digest.into();
+            AccountId::new_unchecked([words[3], words[2]])
+        })
+        .collect();
+
+    // build ForeignAccount list
+    let mut foreign_accounts = Vec::with_capacity(publisher_ids.len() + 1);
+
+    for pid in publisher_ids {
+        client.import_account_by_id(pid).await?;
+
+        foreign_accounts.push(ForeignAccount::public(
+            pid,
+            AccountStorageRequirements::new([(
+                1u8,
+                &[StorageMapKey::from([
+                    ZERO,
+                    ZERO,
+                    ZERO,
+                    Felt::new(120195681),
+                ])],
+            )]),
+        )?);
+    }
+
+    // finally push the oracle itself
+    foreign_accounts.push(ForeignAccount::public(
+        oracle_account_id,
+        AccountStorageRequirements::default(),
+    )?);
+
+    Ok(foreign_accounts)
+}
+
 #[tokio::test]
 async fn oracle_test_account() -> Result<(), ClientError> {
     delete_keystore_and_store().await;
-    // Initialize client
-    /*
-    let endpoint = Endpoint::new(
-        "http".to_string(),
-        "localhost".to_string(),
-        Some(57123),
-    );
-    */
-    let endpoint = Endpoint::testnet();
 
-    let timeout_ms = 10_000;
-    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+    // --- client init ---------------------------------------------------------
+    let endpoint = Endpoint::testnet();
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, 10_000));
 
     let mut client = ClientBuilder::new()
         .with_rpc(rpc_api)
@@ -52,36 +98,12 @@ async fn oracle_test_account() -> Result<(), ClientError> {
         .build()
         .await?;
 
-    let sync_summary = client.sync_state().await.unwrap();
-    println!("Latest block: {}", sync_summary.block_num);
+    println!("Latest block: {}", client.sync_state().await?.block_num);
 
-    // -------------------------------------------------------------------------
-    // Import Oracle Accounts
-    // -------------------------------------------------------------------------
+    // --- import oracle + publishers -----------------------------------------
     let oracle_account_id = AccountId::from_hex("0x4f67e78643022e00000220d8997e33").unwrap();
-    client
-        .import_account_by_id(oracle_account_id)
-        .await
-        .unwrap();
 
-    let publisher_account_id = AccountId::from_hex("0x0db5afa7f28ba90000029f98301f46").unwrap();
-    client
-        .import_account_by_id(publisher_account_id)
-        .await
-        .unwrap();
-
-    // let account = client.get_account(publisher_account_id).await.unwrap();
-
-    println!(
-        "oracle id: {:?} {:?}",
-        oracle_account_id.prefix(),
-        oracle_account_id.suffix()
-    );
-    println!(
-        "publisher_account_id: {:?} {:?}",
-        publisher_account_id.prefix(),
-        publisher_account_id.suffix()
-    );
+    let foreign_accounts = get_oracle_foreign_accounts(&mut client, oracle_account_id).await?;
 
     // -------------------------------------------------------------------------
     // Create basic contract
@@ -122,27 +144,7 @@ async fn oracle_test_account() -> Result<(), ClientError> {
         .await
         .unwrap();
 
-    // -------------------------------------------------------------------------
-    // Call the contract with a script
-    // -------------------------------------------------------------------------
-    let oracle_foreign_account =
-        ForeignAccount::public(oracle_account_id, AccountStorageRequirements::default()).unwrap();
-
-    let publisher_foreign_account = ForeignAccount::public(
-        publisher_account_id,
-        AccountStorageRequirements::new([(
-            1u8,
-            &[StorageMapKey::from([
-                ZERO,
-                ZERO,
-                ZERO,
-                Felt::new(120195681),
-            ])],
-        )]),
-    )
-    .unwrap();
-
-    // Load the MASM script referencing the increment procedure
+    // --- build & submit tx ---------------------------------------------------
     let script_path = Path::new("./masm/scripts/oracle_reader_script.masm");
     let script_code = fs::read_to_string(script_path).unwrap();
 
@@ -163,12 +165,11 @@ async fn oracle_test_account() -> Result<(), ClientError> {
 
     // Build a transaction request with the custom script
     let tx_increment_request = TransactionRequestBuilder::new()
-        .with_foreign_accounts([publisher_foreign_account, oracle_foreign_account])
+        .with_foreign_accounts(foreign_accounts)
         .with_custom_script(tx_script)
         .build()
         .unwrap();
 
-    // Execute the transaction locally
     let tx_result = client
         .new_transaction(oracle_reader_contract.id(), tx_increment_request)
         .await
