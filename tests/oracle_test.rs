@@ -31,8 +31,17 @@ use miden_clob_designs::common::{
 
 #[tokio::test]
 async fn oracle_test_account() -> Result<(), ClientError> {
+    delete_keystore_and_store().await;
     // Initialize client
+    /*
+    let endpoint = Endpoint::new(
+        "http".to_string(),
+        "localhost".to_string(),
+        Some(57123),
+    );
+    */
     let endpoint = Endpoint::testnet();
+
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -46,8 +55,9 @@ async fn oracle_test_account() -> Result<(), ClientError> {
     let sync_summary = client.sync_state().await.unwrap();
     println!("Latest block: {}", sync_summary.block_num);
 
-    // _____
-
+    // -------------------------------------------------------------------------
+    // Import Oracle Accounts
+    // -------------------------------------------------------------------------
     let oracle_account_id = AccountId::from_hex("0x4f67e78643022e00000220d8997e33").unwrap();
     client
         .import_account_by_id(oracle_account_id)
@@ -60,12 +70,22 @@ async fn oracle_test_account() -> Result<(), ClientError> {
         .await
         .unwrap();
 
-    // -------------------------------------------------------------------------
-    // STEP 1: Create a basic counter contract
-    // -------------------------------------------------------------------------
-    println!("\n[STEP 1] Creating counter contract.");
+    // let account = client.get_account(publisher_account_id).await.unwrap();
 
-    // Load the MASM file for the counter contract
+    println!(
+        "oracle id: {:?} {:?}",
+        oracle_account_id.prefix(),
+        oracle_account_id.suffix()
+    );
+    println!(
+        "publisher_account_id: {:?} {:?}",
+        publisher_account_id.prefix(),
+        publisher_account_id.suffix()
+    );
+
+    // -------------------------------------------------------------------------
+    // Create basic contract
+    // -------------------------------------------------------------------------
     let contract_code =
         fs::read_to_string(Path::new("./masm/accounts/oracle_reader.masm")).unwrap();
 
@@ -89,7 +109,6 @@ async fn oracle_test_account() -> Result<(), ClientError> {
 
     let anchor_block = client.get_latest_epoch_block().await.unwrap();
 
-    // Build the new `Account` with the component
     let (oracle_reader_contract, seed) = AccountBuilder::new(seed)
         .anchor((&anchor_block).try_into().unwrap())
         .account_type(AccountType::RegularAccountImmutableCode)
@@ -104,9 +123,8 @@ async fn oracle_test_account() -> Result<(), ClientError> {
         .unwrap();
 
     // -------------------------------------------------------------------------
-    // STEP 2: Call the Counter Contract with a script
+    // Call the contract with a script
     // -------------------------------------------------------------------------
-
     let oracle_foreign_account =
         ForeignAccount::public(oracle_account_id, AccountStorageRequirements::default()).unwrap();
 

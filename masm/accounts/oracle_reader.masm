@@ -15,6 +15,8 @@ export.get_price
     push.5721796415433354752
     # => [oracle_id_prefix, oracle_id_suffix, GET_MEDIAN_HASH, PAIR]
 
+    push.222 debug.stack drop
+
     exec.tx::execute_foreign_procedure
     # => [PRICE]
 
