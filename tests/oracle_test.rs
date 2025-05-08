@@ -1,8 +1,10 @@
+use miden_objects::account::AccountComponent;
+use rand::RngCore;
 use std::{fs, path::Path, sync::Arc};
 use tokio::time::{sleep, Duration};
 
 use miden_client::{
-    account::AccountId,
+    account::{AccountBuilder, AccountId, AccountStorageMode, AccountType, StorageSlot},
     asset::FungibleAsset,
     builder::ClientBuilder,
     keystore::FilesystemKeyStore,
@@ -10,16 +12,163 @@ use miden_client::{
         Note, NoteAssets, NoteExecutionHint, NoteExecutionMode, NoteInputs, NoteMetadata,
         NoteRecipient, NoteScript, NoteTag, NoteType,
     },
-    rpc::{domain::account::AccountStorageRequirements, Endpoint, TonicRpcClient},
-    transaction::{ForeignAccount, OutputNote, TransactionKernel, TransactionRequestBuilder},
-    ClientError, Felt,
+    rpc::{
+        domain::account::{AccountStorageRequirements, StorageMapKey},
+        Endpoint, TonicRpcClient,
+    },
+    transaction::{
+        ForeignAccount, OutputNote, TransactionKernel, TransactionRequestBuilder, TransactionScript,
+    },
+    ClientError, Felt, Word, ZERO,
 };
 
 use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
-    create_basic_account, create_basic_faucet, delete_keystore_and_store, wait_for_notes,
+    create_basic_account, create_basic_faucet, create_library, delete_keystore_and_store,
+    wait_for_notes,
 };
+
+#[tokio::test]
+async fn oracle_test_account() -> Result<(), ClientError> {
+    // Initialize client
+    let endpoint = Endpoint::testnet();
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    // _____
+
+    let oracle_account_id = AccountId::from_hex("0x4f67e78643022e00000220d8997e33").unwrap();
+    client
+        .import_account_by_id(oracle_account_id)
+        .await
+        .unwrap();
+
+    let publisher_account_id = AccountId::from_hex("0x0db5afa7f28ba90000029f98301f46").unwrap();
+    client
+        .import_account_by_id(publisher_account_id)
+        .await
+        .unwrap();
+
+    // -------------------------------------------------------------------------
+    // STEP 1: Create a basic counter contract
+    // -------------------------------------------------------------------------
+    println!("\n[STEP 1] Creating counter contract.");
+
+    // Load the MASM file for the counter contract
+    let contract_code =
+        fs::read_to_string(Path::new("./masm/accounts/oracle_reader.masm")).unwrap();
+
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
+
+    let contract_component = AccountComponent::compile(
+        contract_code.clone(),
+        assembler,
+        vec![StorageSlot::Value([
+            Felt::new(0),
+            Felt::new(0),
+            Felt::new(0),
+            Felt::new(0),
+        ])],
+    )
+    .unwrap()
+    .with_supports_all_types();
+
+    let mut seed = [0_u8; 32];
+    client.rng().fill_bytes(&mut seed);
+
+    let anchor_block = client.get_latest_epoch_block().await.unwrap();
+
+    // Build the new `Account` with the component
+    let (oracle_reader_contract, seed) = AccountBuilder::new(seed)
+        .anchor((&anchor_block).try_into().unwrap())
+        .account_type(AccountType::RegularAccountImmutableCode)
+        .storage_mode(AccountStorageMode::Public)
+        .with_component(contract_component.clone())
+        .build()
+        .unwrap();
+
+    client
+        .add_account(&oracle_reader_contract.clone(), Some(seed), false)
+        .await
+        .unwrap();
+
+    // -------------------------------------------------------------------------
+    // STEP 2: Call the Counter Contract with a script
+    // -------------------------------------------------------------------------
+
+    let oracle_foreign_account =
+        ForeignAccount::public(oracle_account_id, AccountStorageRequirements::default()).unwrap();
+
+    let publisher_foreign_account = ForeignAccount::public(
+        publisher_account_id,
+        AccountStorageRequirements::new([(
+            1u8,
+            &[StorageMapKey::from([
+                ZERO,
+                ZERO,
+                ZERO,
+                Felt::new(120195681),
+            ])],
+        )]),
+    )
+    .unwrap();
+
+    // Load the MASM script referencing the increment procedure
+    let script_path = Path::new("./masm/scripts/oracle_reader_script.masm");
+    let script_code = fs::read_to_string(script_path).unwrap();
+
+    let assembler = TransactionKernel::assembler().with_debug_mode(true);
+    let account_component_lib = create_library(
+        assembler.clone(),
+        "external_contract::oracle_reader",
+        &contract_code,
+    )
+    .unwrap();
+
+    let tx_script = TransactionScript::compile(
+        script_code,
+        [],
+        assembler.with_library(&account_component_lib).unwrap(),
+    )
+    .unwrap();
+
+    // Build a transaction request with the custom script
+    let tx_increment_request = TransactionRequestBuilder::new()
+        .with_foreign_accounts([publisher_foreign_account, oracle_foreign_account])
+        .with_custom_script(tx_script)
+        .build()
+        .unwrap();
+
+    // Execute the transaction locally
+    let tx_result = client
+        .new_transaction(oracle_reader_contract.id(), tx_increment_request)
+        .await
+        .unwrap();
+
+    let tx_id = tx_result.executed_transaction().id();
+    println!(
+        "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
+        tx_id
+    );
+
+    // Submit transaction to the network
+    let _ = client.submit_transaction(tx_result).await;
+
+    client.sync_state().await.unwrap();
+
+    Ok(())
+}
 
 #[tokio::test]
 async fn oracle_test_note() -> Result<(), ClientError> {
@@ -164,9 +313,19 @@ async fn oracle_test_note() -> Result<(), ClientError> {
     let oracle_foreign_account =
         ForeignAccount::public(oracle_account_id, AccountStorageRequirements::default()).unwrap();
 
-    let publisher_foreign_account =
-        ForeignAccount::public(publisher_account_id, AccountStorageRequirements::default())
-            .unwrap();
+    let publisher_foreign_account = ForeignAccount::public(
+        publisher_account_id,
+        AccountStorageRequirements::new([(
+            1u8,
+            &[StorageMapKey::from([
+                ZERO,
+                ZERO,
+                ZERO,
+                Felt::new(120195681),
+            ])],
+        )]),
+    )
+    .unwrap();
 
     wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");

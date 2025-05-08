@@ -1,0 +1,7 @@
+use.external_contract::oracle_reader
+
+begin
+    push.101 debug.stack drop
+
+    exec.oracle_reader::get_price
+end

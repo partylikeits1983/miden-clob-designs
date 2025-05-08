@@ -2,7 +2,7 @@ use.miden::tx
 use.miden::note
 use.miden::contracts::wallets::basic->wallet
 
-begin
+export.get_price
     push.111 debug.stack drop
 
     push.0.0.0.120195681
@@ -16,22 +16,10 @@ begin
     # => [oracle_id_prefix, oracle_id_suffix, GET_MEDIAN_HASH, PAIR]
 
     exec.tx::execute_foreign_procedure
-    # => [count]
+    # => [PRICE]
 
     debug.stack
-    # => [count]
+    # => [PRICE]
 
-    push.0 exec.note::get_assets
-    # => [num_assets, dest_ptr]
-
-    drop
-    # => [dest_ptr]
-
-    # Load asset from memory
-    mem_loadw
-    # => [ASSET]
-
-    # Call receive asset in wallet
-    call.wallet::receive_asset
-
+    dropw dropw
 end
