@@ -369,6 +369,134 @@ async fn swap_note_partial_consume_private_test() -> Result<(), ClientError> {
 }
 
 #[tokio::test]
+async fn swap_note_reclaim_public_test() -> Result<(), ClientError> {
+    // Reset the store and initialize the client.
+    delete_keystore_and_store().await;
+
+    // Initialize client
+    let _endpoint = Endpoint::new(
+        "https".to_string(),
+        "rpc.testnet.miden.io".to_string(),
+        Some(443),
+    );
+    let endpoint = Endpoint::testnet();
+
+    let timeout_ms = 10_000;
+    let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
+
+    let mut client = ClientBuilder::new()
+        .with_rpc(rpc_api)
+        .with_filesystem_keystore("./keystore")
+        .in_debug_mode(true)
+        .build()
+        .await?;
+
+    let sync_summary = client.sync_state().await.unwrap();
+    println!("Latest block: {}", sync_summary.block_num);
+
+    let keystore = FilesystemKeyStore::new("./keystore".into()).unwrap();
+
+    let balances = vec![
+        vec![100, 0], // For account[0] => Alice
+        vec![0, 100], // For account[1] => Bob
+    ];
+    let (accounts, faucets) =
+        setup_accounts_and_faucets(&mut client, keystore, 2, 2, balances).await?;
+
+    // rename for clarity
+    let alice_account = accounts[0].clone();
+    let faucet_a = faucets[0].clone();
+    let faucet_b = faucets[1].clone();
+
+    // -------------------------------------------------------------------------
+    // STEP 1: Create SWAPP note
+    // -------------------------------------------------------------------------
+    println!("\n[STEP 3] Create SWAPP note");
+
+    // offered asset amount
+    let amount_a = 50;
+    let asset_a = FungibleAsset::new(faucet_a.id(), amount_a).unwrap();
+
+    // requested asset amount
+    let amount_b = 50;
+    let asset_b = FungibleAsset::new(faucet_b.id(), amount_b).unwrap();
+
+    let swap_serial_num = client.rng().draw_word();
+    let swap_count = 0;
+
+    let swapp_note = create_partial_swap_note(
+        alice_account.id(),
+        alice_account.id(),
+        asset_a.into(),
+        asset_b.into(),
+        swap_serial_num,
+        swap_count,
+    )
+    .unwrap();
+
+    let swapp_tag = swapp_note.metadata().tag();
+
+    let note_req = TransactionRequestBuilder::new()
+        .with_own_output_notes(vec![OutputNote::Full(swapp_note.clone())])
+        .build()
+        .unwrap();
+    let tx_result = client
+        .new_transaction(alice_account.id(), note_req)
+        .await
+        .unwrap();
+
+    println!(
+        "View transaction on MidenScan: https://testnet.midenscan.com/tx/{:?}",
+        tx_result.executed_transaction().id()
+    );
+
+    let _ = client.submit_transaction(tx_result).await;
+    client.sync_state().await?;
+
+    let swapp_note_id = swapp_note.id();
+
+    // Time from after SWAPP creation
+    let start_time = Instant::now();
+
+    let _ = get_swapp_note(&mut client, swapp_tag, swapp_note_id).await;
+
+    // -------------------------------------------------------------------------
+    // STEP 2: Reclaim SWAPP note
+    // -------------------------------------------------------------------------
+
+    println!(
+        "alice account id: {:?} {:?}",
+        alice_account.id().prefix(),
+        alice_account.id().suffix()
+    );
+
+    let consume_custom_req = TransactionRequestBuilder::new()
+        .with_authenticated_input_notes([(swapp_note.id(), None)])
+        .build()
+        .unwrap();
+
+    let tx_result = client
+        .new_transaction(alice_account.id(), consume_custom_req)
+        .await
+        .unwrap();
+
+    println!(
+        "Consumed Note Tx on MidenScan: https://testnet.midenscan.com/tx/{:?}",
+        tx_result.executed_transaction().id()
+    );
+    println!("account delta: {:?}", tx_result.account_delta().vault());
+
+    let _ = client.submit_transaction(tx_result).await;
+
+    // Stop timing
+    let duration = start_time.elapsed();
+    println!("SWAPP note partially filled");
+    println!("Time from SWAPP creation to partial fill: {:?}", duration);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn partial_swap_chain_public_optimistic_benchmark() -> Result<(), ClientError> {
     delete_keystore_and_store().await;
 
