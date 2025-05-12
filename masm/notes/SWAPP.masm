@@ -248,15 +248,16 @@ end
 #! Outputs: [is_creator]
 #!
 proc.is_consumer_is_creator
-
     push.0 exec.note::get_inputs drop drop
     # => []
 
     exec.account::get_id
     # => [acct_id_prefix, acct_id_suffix]
 
-    mem_load.SWAPP_CREATOR_PREFIX_INPUT mem_load.SWAPP_CREATOR_SUFFIX_INPUT
+    mem_load.SWAPP_CREATOR_SUFFIX_INPUT mem_load.SWAPP_CREATOR_PREFIX_INPUT
     # => [acct_id_prefix_input, acct_id_suffix_input, acct_id_prefix, acct_id_suffix]
+
+    push.444 debug.stack drop
 
     movup.2
     # => [acct_id_prefix, acct_id_prefix_input, acct_id_suffix_input, acct_id_suffix]
@@ -280,7 +281,6 @@ end
 #! Outputs: []
 #!
 proc.handle_reclaim
-
     push.0 exec.note::get_assets
 
     mem_loadw.0
@@ -576,6 +576,8 @@ end
 begin
     # => [NOTE_ARGS]
 
+    push.1010 debug.stack drop
+
     # can provide amount B in as note args
     mem_store.AMT_TOKENS_B_IN drop drop drop
     # => []
@@ -586,6 +588,8 @@ begin
 
     exec.is_consumer_is_creator
     # => [is_creator]
+
+    push.111 debug.stack drop
 
     if.true
         exec.handle_reclaim
