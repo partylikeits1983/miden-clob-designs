@@ -176,9 +176,6 @@ proc.build_p2id_recipient_hash
     swapw hmerge
     # => [SERIAL_SCRIPT_HASH]
 
-    # push.2 push.SWAPP_CREATOR_PREFIX_INPUT
-    # => [inputs_ptr, num_inputs, SERIAL_SCRIPT_HASH]
-
     padw
     mem_load.SWAPP_CREATOR_SUFFIX_INPUT mem_load.SWAPP_CREATOR_PREFIX_INPUT
     push.0.0
@@ -317,19 +314,10 @@ end
 
 # => []
 proc.execute_SWAPp
-
-    # if user does not supply amount token B in via note args
-    # then we use the amount of tokens B in their wallet
-    # mem_store.AMT_TOKENS_B_IN
+    push.OFFERED_ASSET_WORD exec.note::get_assets assert.err=ERR_SWAP_WRONG_NUMBER_OF_ASSETS drop
     # => []
 
-    exec.note::get_assets assert.err=ERR_SWAP_WRONG_NUMBER_OF_ASSETS
-    # => [ptr]
-
-    mem_loadw
-    # => [OFFERED_ASSET]
-
-    mem_storew.OFFERED_ASSET_WORD
+    mem_loadw.OFFERED_ASSET_WORD
     # => [OFFERED_ASSET]
 
     mem_store.TOKEN_A_ID_PREFIX
@@ -576,8 +564,6 @@ end
 begin
     # => [NOTE_ARGS]
 
-    push.1010 debug.stack drop
-
     # can provide amount B in as note args
     mem_store.AMT_TOKENS_B_IN drop drop drop
     # => []
@@ -588,8 +574,6 @@ begin
 
     exec.is_consumer_is_creator
     # => [is_creator]
-
-    push.111 debug.stack drop
 
     if.true
         exec.handle_reclaim
