@@ -112,15 +112,21 @@ async fn hybrid_p2id_test() -> Result<(), ClientError> {
     let rng = client.rng();
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
-    
+
     // Hybrid P2ID - P2ID(RT) Pay to Id, Optional Reclaimable & Timelockable
 
     let target = bob_account.id();
     let reclaim_block_height = Felt::new(0);
     let timelock_block_height = Felt::new(1);
 
-    let note_inputs = NoteInputs::new(vec![target.suffix(), target.prefix().into(), reclaim_block_height, timelock_block_height]).unwrap();
-    
+    let note_inputs = NoteInputs::new(vec![
+        target.suffix(),
+        target.prefix().into(),
+        reclaim_block_height,
+        timelock_block_height,
+    ])
+    .unwrap();
+
     let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
     let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
@@ -156,7 +162,7 @@ async fn hybrid_p2id_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
-    
+
     let consume_custom_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(custom_note.id(), None)])
         .build()
@@ -166,7 +172,7 @@ async fn hybrid_p2id_test() -> Result<(), ClientError> {
         .new_transaction(bob_account.id(), consume_custom_req)
         .await
         .unwrap();
-    
+
     println!(
         "Consumed Note Tx on MidenScan: https://testnet.midenscan.com/tx/{:?}",
         tx_result.executed_transaction().id()

@@ -102,7 +102,7 @@ proc.is_consumable
     # exec.memory::get_blk_timestamp
     # assert blk_timestamp >= expiration
     # 03/23/2025
-    push.1742747731
+    push.1842747731
     # => [timestamp]
 
     mem_load.EXPIRATION
@@ -126,6 +126,8 @@ proc.output_p2id
 
     mem_load.PAYBACK_TAG_INPUT
     # => [tag, aux, note_type, execution_hint, RECIPIENT]
+
+    push.202 debug.stack drop
 
     call.wallet::create_note
     # => [note_idx, pad(15) ...]
@@ -154,6 +156,8 @@ begin
 
     exec.is_option_buyer
     # => [is_buyer]
+
+    push.222 debug.stack drop
     if.true
         # handle swap
         exec.output_p2id

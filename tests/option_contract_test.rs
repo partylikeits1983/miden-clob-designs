@@ -129,6 +129,7 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
 
     let consume_req = TransactionRequestBuilder::new()
         .with_authenticated_input_notes([(p2id_note.id(), None)])
+        .with_unauthenticated_input_notes([(p2id_note, None)])
         .build()
         .unwrap();
     let tx_exec = client
@@ -187,6 +188,11 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
     // -------------------------------------------------------------------------
     // STEP 4: Consume the Options Contract Note
     // -------------------------------------------------------------------------
+
+    println!(
+        "p2id note recipient: {:?}",
+        p2id_payback_note.recipient().digest()
+    );
 
     wait_for_notes(&mut client, &bob_account, 1).await?;
     println!("\n[STEP 4] Bob consumes the Custom Note with Correct Secret");
