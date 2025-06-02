@@ -71,14 +71,12 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
     let faucet_id = faucet_a.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::mint_fungible_asset(
+    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
         mint_amount,
         alice_account.id(),
         NoteType::Public,
         client.rng(),
     )
-    .unwrap()
-    .build()
     .unwrap();
     let tx_exec = client.new_transaction(faucet_a.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
@@ -106,14 +104,12 @@ async fn option_contract_settle_test() -> Result<(), ClientError> {
     let faucet_id = faucet_b.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::mint_fungible_asset(
+    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
         mint_amount,
         bob_account.id(),
         NoteType::Public,
         client.rng(),
     )
-    .unwrap()
-    .build()
     .unwrap();
     let tx_exec = client.new_transaction(faucet_b.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
@@ -266,14 +262,12 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
     let faucet_id = faucet_a.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::mint_fungible_asset(
+    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
         mint_amount,
         alice_account.id(),
         NoteType::Public,
         client.rng(),
     )
-    .unwrap()
-    .build()
     .unwrap();
     let tx_exec = client.new_transaction(faucet_a.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
@@ -301,14 +295,12 @@ async fn option_contract_otm_reclaim_test() -> Result<(), ClientError> {
     let faucet_id = faucet_b.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::mint_fungible_asset(
+    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
         mint_amount,
         bob_account.id(),
         NoteType::Public,
         client.rng(),
     )
-    .unwrap()
-    .build()
     .unwrap();
     let tx_exec = client.new_transaction(faucet_b.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;

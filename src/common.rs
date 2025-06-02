@@ -268,14 +268,12 @@ pub async fn setup_accounts_and_faucets(
 
             // Build a "mint fungible asset" transaction from this faucet
             let fungible_asset = FungibleAsset::new(faucet.id(), amount_to_mint).unwrap();
-            let tx_req = TransactionRequestBuilder::mint_fungible_asset(
+            let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
                 fungible_asset,
                 account.id(),
                 NoteType::Public,
                 client.rng(),
             )
-            .unwrap()
-            .build()
             .unwrap();
 
             // Submit the mint transaction
@@ -320,13 +318,12 @@ pub async fn mint_from_faucet_for_matcher(
     }
 
     let asset = FungibleAsset::new(faucet.id(), amount).unwrap();
-    let mint_req = TransactionRequestBuilder::mint_fungible_asset(
+    let mint_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
         asset,
         account.id(),
         NoteType::Public,
         client.rng(),
-    )?
-    .build()?;
+    ).unwrap();
     let mint_exec = client.new_transaction(faucet.id(), mint_req).await?;
     client.submit_transaction(mint_exec.clone()).await?;
 

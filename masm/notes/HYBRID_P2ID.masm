@@ -95,8 +95,6 @@ begin
     push.0 exec.note::get_inputs
     # => [num_inputs, inputs_ptr]
 
-    push.111 debug.stack debug.mem drop
-
     # step 1:
     # get mem addr 4 (timelock)
     # if 0, then check if can consume
