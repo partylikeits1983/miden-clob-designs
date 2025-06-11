@@ -37,6 +37,7 @@ end
 
 begin
     # => [account_prefix, account_suffix, tag]
+
     mem_store.ACCOUNT_ID_PREFIX
     mem_store.ACCOUNT_ID_SUFFIX
     mem_store.P2ID_TAG

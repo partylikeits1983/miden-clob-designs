@@ -262,9 +262,11 @@ proc.is_consumer_is_creator
 
     if.true
         # => [acct_id_suffix_input, acct_id_suffix]
+
         eq
     else
         # => [acct_id_suffix_input, acct_id_suffix]
+
         drop drop push.0
     end
     # => [is_creator]
@@ -311,6 +313,7 @@ end
 #
 
 # => []
+
 proc.execute_SWAPp
     push.OFFERED_ASSET_WORD exec.note::get_assets assert.err=ERR_SWAP_WRONG_NUMBER_OF_ASSETS drop
     # => []
@@ -375,6 +378,7 @@ proc.execute_SWAPp
 
         mem_store.AMT_TOKENS_B_IN
         # => []
+
     else
         # no need to verify that amount tokens b via note args is
         # valid bc if it isn't call.wallet::send_asset will fail

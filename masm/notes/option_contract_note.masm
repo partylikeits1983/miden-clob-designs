@@ -171,11 +171,13 @@ begin
 
         call.wallet::receive_asset
         # => []
+
     else
         exec.is_underwriter
         if.true
             exec.handle_underwriter_reclaim
             # => []
+
         else
             push.0 assert
             # => [panic]

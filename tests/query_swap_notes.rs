@@ -15,8 +15,8 @@ use std::sync::Arc;
 use miden_crypto::rand::FeltRng;
 
 use miden_clob_designs::common::{
-    compute_partial_swapp, create_p2id_note, create_partial_swap_note,
-    delete_keystore_and_store, get_p2id_serial_num, get_swapp_note, setup_accounts_and_faucets,
+    compute_partial_swapp, create_p2id_note, create_partial_swap_note, delete_keystore_and_store,
+    get_p2id_serial_num, get_swapp_note, setup_accounts_and_faucets,
 };
 
 #[tokio::test]

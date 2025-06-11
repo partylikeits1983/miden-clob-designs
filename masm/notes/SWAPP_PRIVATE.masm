@@ -267,9 +267,11 @@ proc.is_consumer_is_creator
 
     if.true
         # => [acct_id_suffix_input, acct_id_suffix]
+
         eq
     else
         # => [acct_id_suffix_input, acct_id_suffix]
+
         drop drop push.0
     end
     # => [is_creator]
@@ -317,6 +319,7 @@ end
 #
 
 # => []
+
 proc.execute_SWAPp
 
     # if user does not supply amount token B in via note args
@@ -390,6 +393,7 @@ proc.execute_SWAPp
 
         mem_store.AMT_TOKENS_B_IN
         # => []
+
     else
         # no need to verify that amount tokens b via note args is
         # valid bc if it isn't call.wallet::send_asset will fail
@@ -567,6 +571,7 @@ proc.execute_SWAPp
 
         dropw drop
         # => []
+
     else
         # do not output SWAPp'
         # P2ID already created

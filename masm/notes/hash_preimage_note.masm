@@ -2,6 +2,7 @@ use.miden::note
 use.miden::contracts::wallets::basic->wallet
 
 # => [HASH_PREIMAGE_SECRET]
+
 begin
     push.111 debug.stack drop
 

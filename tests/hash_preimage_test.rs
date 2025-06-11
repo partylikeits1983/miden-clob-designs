@@ -67,13 +67,14 @@ async fn hash_preimage_note_test() -> Result<(), ClientError> {
     let faucet_id = faucet.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
-        mint_amount,
-        alice_account.id(),
-        NoteType::Public,
-        client.rng(),
-    )
-    .unwrap();
+    let tx_req = TransactionRequestBuilder::new()
+        .build_mint_fungible_asset(
+            mint_amount,
+            alice_account.id(),
+            NoteType::Public,
+            client.rng(),
+        )
+        .unwrap();
     let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 

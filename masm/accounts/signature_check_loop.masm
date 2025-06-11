@@ -49,6 +49,7 @@ export.mod_12289
     movup.2
     push.M
     # => [M, qhi, overflow, M * qlo % 2^32, a_hi, a_lo, ...]
+
     u32overflowing_madd
     # => [t1, t0, M * qlo % 32, a_hi, a_lo, ...] where t = t1 * 2^32 + t0 and t = M * qhi + overflow
     # Note by the bound on x - r = q * M, we are guaranteed that t1 = 0
@@ -60,6 +61,7 @@ export.mod_12289
     dup
     u32overflowing_sub.M
     # => [underflow_bit, r - M, r, res_hi, res_lo, a_hi, a_lo, ...]
+
     assert drop
     # => [r, res_hi, res_lo, a_hi, a_lo, ...]
 
@@ -71,6 +73,7 @@ export.mod_12289
     movup.3
     u32overflowing_add
     # => [flag, final_res_hi, final_res_lo, r, a_hi, a_lo, ...] flag should be 0 by the bound on inputs
+
     drop
     # => [final_res_hi, final_res_lo, r, a_hi, a_lo, ...]
 
@@ -552,17 +555,21 @@ export.compute_s2_norm_sq
         exec.norm_sq
         swap
         # => [c2, norm_sq(c3), c1, c0, s2_ptr, ...]
+
         exec.norm_sq
         add
         swap
         # => [c1, norm_sq(c2) + norm_sq(c3), c0, s2_ptr, ...]
+
         exec.norm_sq
         add
         swap
         # => [c0, norm_sq(c1) + norm_sq(c2) + norm_sq(c3), s2_ptr, ...]
+
         exec.norm_sq
         add
         # => [norm_sq(c0) + norm_sq(c1) + norm_sq(c2) + norm_sq(c3), s2_ptr, ...]
+
         swap
         add.4
         # => [s2_ptr + 1, norm_sq(c0) + norm_sq(c1) + norm_sq(c2) + norm_sq(c3), ...]

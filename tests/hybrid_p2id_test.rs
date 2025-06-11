@@ -25,12 +25,7 @@ async fn hybrid_p2id_test_unlockable_succeeds() -> Result<(), ClientError> {
     // Reset the store and initialize the client.
     delete_keystore_and_store().await;
 
-    // Initialize client
-    let endpoint = Endpoint::new(
-        "https".to_string(),
-        "rpc.testnet.miden.io".to_string(),
-        Some(443),
-    );
+    let endpoint = Endpoint::localhost();
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
 
@@ -67,13 +62,14 @@ async fn hybrid_p2id_test_unlockable_succeeds() -> Result<(), ClientError> {
     let faucet_id = faucet.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
-        mint_amount,
-        alice_account.id(),
-        NoteType::Public,
-        client.rng(),
-    )
-    .unwrap();
+    let tx_req = TransactionRequestBuilder::new()
+        .build_mint_fungible_asset(
+            mint_amount,
+            alice_account.id(),
+            NoteType::Public,
+            client.rng(),
+        )
+        .unwrap();
     let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 
@@ -100,13 +96,9 @@ async fn hybrid_p2id_test_unlockable_succeeds() -> Result<(), ClientError> {
     // STEP 3: Create Hybrid P2ID
     // -------------------------------------------------------------------------
     println!("\n[STEP 3] Create Hybrid P2ID");
-    let mut secret_vals = vec![Felt::new(1), Felt::new(2), Felt::new(3), Felt::new(4)];
-    secret_vals.splice(0..0, Word::default().iter().cloned());
-    let digest = Hasher::hash_elements(&secret_vals);
-    println!("digest: {:?}", digest);
 
-    let assembler = TransactionKernel::assembler().with_debug_mode(true);
-    let code = fs::read_to_string(Path::new("./masm/notes/HYBRID_P2ID.masm")).unwrap();
+    let assembler = TransactionKernel::assembler().with_debug_mode(false);
+    let code = fs::read_to_string(Path::new("./masm/notes/P2IDE.masm")).unwrap();
     let rng = client.rng();
     let serial_num = rng.draw_word();
     let note_script = NoteScript::compile(code, assembler).unwrap();
@@ -126,7 +118,7 @@ async fn hybrid_p2id_test_unlockable_succeeds() -> Result<(), ClientError> {
     .unwrap();
 
     let recipient = NoteRecipient::new(serial_num, note_script, note_inputs.clone());
-    let tag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
+    let tag: NoteTag = NoteTag::for_public_use_case(0, 0, NoteExecutionMode::Local).unwrap();
     let metadata = NoteMetadata::new(
         alice_account.id(),
         NoteType::Public,
@@ -136,7 +128,6 @@ async fn hybrid_p2id_test_unlockable_succeeds() -> Result<(), ClientError> {
     )?;
     let vault = NoteAssets::new(vec![mint_amount.into()])?;
     let custom_note = Note::new(vault, metadata, recipient);
-    println!("note hash: {:?}", custom_note.commitment());
 
     let note_req = TransactionRequestBuilder::new()
         .with_own_output_notes(vec![OutputNote::Full(custom_note.clone())])
@@ -223,7 +214,6 @@ async fn hybrid_p2id_test_not_unlockable() -> Result<(), ClientError> {
     println!("Faucet account ID: {:?}", faucet.id().to_hex());
     client.sync_state().await?;
 
-
     // -------------------------------------------------------------------------
     // STEP 2: Mint tokens with P2ID
     // -------------------------------------------------------------------------
@@ -231,13 +221,14 @@ async fn hybrid_p2id_test_not_unlockable() -> Result<(), ClientError> {
     let faucet_id = faucet.id();
     let amount: u64 = 100;
     let mint_amount = FungibleAsset::new(faucet_id, amount).unwrap();
-    let tx_req = TransactionRequestBuilder::new().build_mint_fungible_asset(
-        mint_amount,
-        alice_account.id(),
-        NoteType::Public,
-        client.rng(),
-    )
-    .unwrap();
+    let tx_req = TransactionRequestBuilder::new()
+        .build_mint_fungible_asset(
+            mint_amount,
+            alice_account.id(),
+            NoteType::Public,
+            client.rng(),
+        )
+        .unwrap();
     let tx_exec = client.new_transaction(faucet.id(), tx_req).await?;
     client.submit_transaction(tx_exec.clone()).await?;
 

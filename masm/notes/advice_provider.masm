@@ -15,6 +15,7 @@ proc.get_vals_from_advice_map
 end
 
 # => [NOTE_ARGS_COMMITMENT]
+
 begin
     exec.get_vals_from_advice_map
     # => [WORD_1]
